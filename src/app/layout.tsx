@@ -5,6 +5,7 @@ import { ThemeProvider } from "@/components/layout/ThemeProvider";
 import { AppShell } from "@/components/layout/AppShell";
 import { Toaster } from "@/components/ui/toaster";
 import { ServiceWorkerRegister } from "@/components/layout/ServiceWorkerRegister";
+import { SessionWrapper } from "@/components/layout/SessionWrapper";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
@@ -35,11 +36,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${inter.variable} font-sans antialiased`}>
-        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
-          <AppShell>{children}</AppShell>
-          <Toaster />
-          <ServiceWorkerRegister />
-        </ThemeProvider>
+        <SessionWrapper>
+          <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
+            <AppShell>{children}</AppShell>
+            <Toaster />
+            <ServiceWorkerRegister />
+          </ThemeProvider>
+        </SessionWrapper>
       </body>
     </html>
   );

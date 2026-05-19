@@ -1,36 +1,28 @@
-import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/auth";
+import { NextResponse } from "next/server";
 
-const COOKIE_NAME  = "ts-session";
-const PUBLIC_PATHS = ["/auth", "/api/auth"];
+const PUBLIC = ["/auth", "/api/auth"];
 
-/**
- * Real server-side auth guard.
- * Checks the ts-session cookie (set by /api/auth on login).
- * Any protected route without a valid cookie → redirect to /auth?from=<path>.
- * This eliminates the 404 bug — the user is always sent to the auth screen,
- * never to a broken page.
- */
-export function middleware(req: NextRequest) {
+export default auth((req) => {
   const { pathname } = req.nextUrl;
 
   const isPublic =
-    PUBLIC_PATHS.some((p) => pathname.startsWith(p)) ||
+    PUBLIC.some((p) => pathname.startsWith(p)) ||
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon");
 
   if (isPublic) return NextResponse.next();
 
-  const session = req.cookies.get(COOKIE_NAME);
-
-  if (!session?.value) {
+  // Not logged in → send to sign-in page with callbackUrl
+  if (!req.auth) {
     const loginUrl = req.nextUrl.clone();
     loginUrl.pathname = "/auth";
-    loginUrl.search   = `?from=${encodeURIComponent(pathname)}`;
+    loginUrl.searchParams.set("callbackUrl", pathname);
     return NextResponse.redirect(loginUrl);
   }
 
   return NextResponse.next();
-}
+});
 
 export const config = {
   matcher: [

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
+import { signOut } from "next-auth/react";
 import {
   Home, CheckSquare, BookOpen, Zap, Calendar, User,
   Settings, Download, Brain, ChevronLeft, ChevronRight,
@@ -37,18 +38,10 @@ export function Sidebar() {
   const { sidebarCollapsed, toggleSidebar, toggleThoughtsPanel, profile } = useAppStore();
 
   async function handleLogout() {
-    // 1. Clear the server cookie
-    await fetch("/api/auth", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "logout" }),
-    });
-    // 2. Reset the Zustand store name so AppShell guard also triggers
+    // Clear local state and sign out via NextAuth
     useAppStore.getState().updateProfile({ name: "User" });
-    // 3. Wipe localStorage so next visit starts fresh
     localStorage.removeItem("thoughtstack-storage");
-    // 4. Hard redirect — clears React state fully
-    window.location.href = "/auth";
+    await signOut({ callbackUrl: "/auth" });
   }
 
   return (
