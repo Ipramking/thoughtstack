@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { cn, isToday, formatDate } from "@/lib/utils";
+import { toast } from "@/hooks/useToast";
 
 const PRIORITY_OPTIONS: Priority[] = ["low", "medium", "high", "critical"];
 
@@ -122,6 +123,7 @@ export default function TasksPage() {
         category: form.category || undefined,
         reminder: form.reminder,
       });
+      toast.success("Task updated");
     } else {
       addTask({
         title: form.title,
@@ -133,14 +135,15 @@ export default function TasksPage() {
         category: form.category || undefined,
         reminder: form.reminder,
       });
+      toast.success("Task created", form.dueDate ? `Due ${form.dueDate}` : undefined);
     }
     setDialogOpen(false);
   }
 
   function toggleDone(task: Task) {
-    updateTask(task.id, {
-      status: task.status === "done" ? "todo" : "done",
-    });
+    const nowDone = task.status !== "done";
+    updateTask(task.id, { status: nowDone ? "done" : "todo" });
+    if (nowDone) toast.success("Task completed! ✓", task.title);
   }
 
   const stats = {

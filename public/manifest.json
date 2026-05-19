@@ -1,0 +1,43 @@
+{
+  "name": "ThoughtStack",
+  "short_name": "ThoughtStack",
+  "description": "Your AI-powered personal operating system",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0d0d0d",
+  "theme_color": "#0d0d0d",
+  "orientation": "portrait-primary",
+  "categories": ["productivity", "lifestyle"],
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Tasks",
+      "url": "/tasks",
+      "description": "View your tasks"
+    },
+    {
+      "name": "Journal",
+      "url": "/journal",
+      "description": "Write a journal entry"
+    },
+    {
+      "name": "Thoughts AI",
+      "url": "/?thoughts=open",
+      "description": "Open Thoughts AI"
+    }
+  ]
+}

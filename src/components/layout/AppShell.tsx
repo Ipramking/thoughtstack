@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Sidebar } from "./Sidebar";
 import { ThoughtsPanel } from "./ThoughtsPanel";
 import { MainContentInner } from "./MainContentInner";
+import { BottomNav } from "./BottomNav";
 
 const PUBLIC_PATHS = ["/auth"];
 
@@ -13,11 +14,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
-    // Skip guard for public pages
     if (PUBLIC_PATHS.includes(pathname)) return;
 
-    // Read profile from localStorage — if name is still default "User"
-    // or unset, the user hasn't completed onboarding yet.
     try {
       const raw = localStorage.getItem("thoughtstack-storage");
       if (!raw) {
@@ -34,16 +32,25 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     }
   }, [pathname, router]);
 
-  // Auth page → clean full-screen layout (no sidebar, no AI panel)
   if (PUBLIC_PATHS.includes(pathname)) {
     return <>{children}</>;
   }
 
   return (
     <div className="flex h-screen overflow-hidden">
-      <Sidebar />
-      <MainContentInner>{children}</MainContentInner>
+      {/* Sidebar — hidden on mobile, visible on md+ */}
+      <div className="hidden md:block">
+        <Sidebar />
+      </div>
+      <MainContentInner>
+        {/* Extra bottom padding on mobile so content clears the bottom nav */}
+        <div className="pb-20 md:pb-0 min-h-full">
+          {children}
+        </div>
+      </MainContentInner>
       <ThoughtsPanel />
+      {/* Bottom nav — only on mobile */}
+      <BottomNav />
     </div>
   );
 }

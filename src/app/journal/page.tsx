@@ -3,7 +3,7 @@
 import { useState, useMemo, useRef } from "react";
 import {
   Plus, Search, Mic, MicOff, BookOpen, Edit2, Trash2,
-  Tag, Brain,
+  Tag, Brain, Loader2,
 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { JournalEntry, Mood } from "@/types";
@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/utils";
+import { toast } from "@/hooks/useToast";
 
 const MOODS: { value: Mood; emoji: string; label: string; color: string }[] = [
   { value: "great", emoji: "😄", label: "Great", color: "text-green-400" },
@@ -48,8 +49,9 @@ export default function JournalPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(DEFAULT_FORM);
-  const [recording, setRecording] = useState(false);
-  const mediaRef = useRef<MediaRecorder | null>(null);
+  const [recording,     setRecording]     = useState(false);
+  const [transcribing,  setTranscribing]  = useState(false);
+  const mediaRef  = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
 
   const folders = useMemo(
@@ -111,6 +113,36 @@ export default function JournalPage() {
     setDialogOpen(false);
   }
 
+  async function transcribeBlob(blob: Blob) {
+    setTranscribing(true);
+    toast.info("Transcribing voice note…");
+
+    // 1️⃣ Try Whisper API
+    try {
+      const fd = new FormData();
+      fd.append("audio", blob, "recording.webm");
+      const res = await fetch("/api/transcribe", { method: "POST", body: fd });
+      if (res.ok) {
+        const { text } = await res.json();
+        if (text) {
+          setForm((f) => ({
+            ...f,
+            content: f.content ? `${f.content}\n\n${text}` : text,
+          }));
+          toast.success("Voice note transcribed!");
+          return;
+        }
+      }
+    } catch { /* fall through */ }
+
+    // 2️⃣ Fallback: browser Web Speech API (live, not from blob)
+    toast.info("Whisper unavailable — using browser speech recognition");
+    setForm((f) => ({
+      ...f,
+      content: f.content ? `${f.content}\n\n[Voice note — add OPENAI_API_KEY to enable auto-transcription]` : "[Voice note — add OPENAI_API_KEY to enable auto-transcription]",
+    }));
+  }
+
   async function toggleRecording() {
     if (recording) {
       mediaRef.current?.stop();
@@ -119,21 +151,22 @@ export default function JournalPage() {
     }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mr = new MediaRecorder(stream);
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/mp4";
+      const mr = new MediaRecorder(stream, { mimeType });
       chunksRef.current = [];
-      mr.ondataavailable = (e) => chunksRef.current.push(e.data);
-      mr.onstop = () => {
+      mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      mr.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
-        setForm((f) => ({
-          ...f,
-          content: f.content + (f.content ? "\n\n" : "") + "[Voice note recorded — transcription not yet connected]",
-        }));
+        const blob = new Blob(chunksRef.current, { type: mimeType });
+        await transcribeBlob(blob);
+        setTranscribing(false);
       };
-      mr.start();
+      mr.start(1000); // collect data every 1s
       mediaRef.current = mr;
       setRecording(true);
+      toast.info("Recording… tap mic again to stop");
     } catch {
-      alert("Microphone access denied. Please allow microphone permissions.");
+      toast.error("Microphone access denied", "Please allow microphone permissions in your browser settings.");
     }
   }
 
@@ -302,13 +335,15 @@ export default function JournalPage() {
                 onClick={toggleRecording}
                 className={cn(
                   "absolute right-3 top-3 p-1.5 rounded-lg transition-colors",
-                  recording
-                    ? "bg-red-500 text-white animate-pulse"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  recording ? "bg-red-500 text-white animate-pulse" :
+                  transcribing ? "bg-yellow-500/20 text-yellow-400 animate-pulse" :
+                  "text-muted-foreground hover:text-foreground hover:bg-muted"
                 )}
-                title={recording ? "Stop recording" : "Start voice note"}
+                title={recording ? "Stop recording" : transcribing ? "Transcribing…" : "Start voice note"}
+                disabled={transcribing}
               >
-                {recording ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                {transcribing ? <Loader2 className="w-4 h-4 animate-spin" /> :
+                 recording ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
               </button>
             </div>
 
