@@ -37,13 +37,18 @@ export function Sidebar() {
   const { sidebarCollapsed, toggleSidebar, toggleThoughtsPanel, profile } = useAppStore();
 
   async function handleLogout() {
+    // 1. Clear the server cookie
     await fetch("/api/auth", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "logout" }),
     });
-    router.push("/auth");
-    router.refresh();
+    // 2. Reset the Zustand store name so AppShell guard also triggers
+    useAppStore.getState().updateProfile({ name: "User" });
+    // 3. Wipe localStorage so next visit starts fresh
+    localStorage.removeItem("thoughtstack-storage");
+    // 4. Hard redirect — clears React state fully
+    window.location.href = "/auth";
   }
 
   return (
