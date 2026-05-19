@@ -1,0 +1,10 @@
+{
+  "name": "thoughtstack",
+  "framework": "nextjs",
+  "buildCommand": "npm run build",
+  "installCommand": "npm install --legacy-peer-deps",
+  "env": {
+    "ANTHROPIC_API_KEY": "@anthropic-api-key",
+    "GEMINI_API_KEY": "@gemini-api-key"
+  }
+}

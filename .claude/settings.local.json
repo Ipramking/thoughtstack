@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-Content \"C:\\\\Users\\\\lenovo\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-lenovo-Documents-Thought-Stack\\\\daf34d62-0de9-4e4b-85e8-cf869b8faa93\\\\tasks\\\\b276pyibb.output\" -Wait)",
+      "Bash(Select-String -Pattern \"success|error|ready|created|done|failed|npm|✓|✗|initialized\" -SimpleMatch)",
+      "PowerShell(npm --version)",
+      "PowerShell(node --version)",
+      "PowerShell(cd \"C:\\\\Users\\\\lenovo\\\\Documents\\\\Thought Stack\"; npm install --legacy-peer-deps --prefer-offline 2>&1; Write-Host \"DONE:$LASTEXITCODE\")",
+      "Bash(\"/c/Program Files/nodejs/node.exe\" node_modules/.bin/next build)",
+      "Bash(ls \"/c/Program Files/nodejs/\")",
+      "Bash(\"/c/Program Files/nodejs/node.exe\" node_modules/typescript/bin/tsc --noEmit)",
+      "Bash(\"/c/Program Files/nodejs/npm\" run build)",
+      "Bash(\"/c/Program Files/nodejs/npx\" vercel whoami)",
+      "Bash(cat \"/c/Users/lenovo/AppData/Roaming/com.vercel.cli/auth.json\" 2>/dev/null | grep -o '\"token\":\"[^\"]*\"' | head -1 || echo \"NOT_LOGGED_IN\")",
+      "Bash(\"/c/Program Files/nodejs/npx\" vercel env add ANTHROPIC_API_KEY production)",
+      "Bash(\"/c/Program Files/nodejs/npx\" vercel link --scope inioluwafrenzy-2372 --project thoughtstack --yes)",
+      "Bash(\"/c/Program Files/nodejs/npx\" vercel link --project thoughtstack --yes)",
+      "Bash(\"/c/Program Files/nodejs/npx\" vercel --prod --yes)"
+    ]
+  }
+}
