@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
 import { signOut, useSession } from "next-auth/react";
 import {
@@ -15,194 +15,175 @@ import { Button } from "@/components/ui/button";
 
 const NAV = {
   Core: [
-    { href: "/", icon: Home, label: "Home" },
-    { href: "/tasks", icon: CheckSquare, label: "Tasks" },
-    { href: "/journal", icon: BookOpen, label: "Journal" },
-    { href: "/skills", icon: Zap, label: "Skills" },
-    { href: "/calendar", icon: Calendar, label: "Calendar" },
-    { href: "/analytics", icon: BarChart2, label: "Analytics" },
+    { href: "/",          icon: Home,        label: "Home"      },
+    { href: "/tasks",     icon: CheckSquare, label: "Tasks"     },
+    { href: "/journal",   icon: BookOpen,    label: "Journal"   },
+    { href: "/skills",    icon: Zap,         label: "Skills"    },
+    { href: "/calendar",  icon: Calendar,    label: "Calendar"  },
+    { href: "/analytics", icon: BarChart2,   label: "Analytics" },
   ],
   Personal: [
-    { href: "/profile", icon: User, label: "Profile" },
+    { href: "/profile",   icon: User,        label: "Profile"   },
   ],
   System: [
-    { href: "/settings", icon: Settings, label: "Settings" },
-    { href: "/export",   icon: Download, label: "Export"   },
+    { href: "/settings",  icon: Settings,    label: "Settings"  },
+    { href: "/export",    icon: Download,    label: "Export"    },
   ],
 };
 
 export function Sidebar() {
   const pathname = usePathname();
-  const router = useRouter();
   const { theme, setTheme } = useTheme();
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === "admin";
   const { sidebarCollapsed, toggleSidebar, toggleThoughtsPanel, profile } = useAppStore();
 
   async function handleLogout() {
-    // Clear local state and sign out via NextAuth
     useAppStore.getState().updateProfile({ name: "User" });
     localStorage.removeItem("thoughtstack-storage");
     await signOut({ callbackUrl: "/auth" });
   }
 
+  const NavItem = ({ href, icon: Icon, label, activeClassName }: {
+    href: string; icon: typeof Home; label: string; activeClassName?: string;
+  }) => {
+    const active = pathname === href;
+    return (
+      <li>
+        <Link
+          href={href}
+          className={cn(
+            "flex items-center gap-2.5 mx-2 px-2.5 py-2 rounded-xl text-sm transition-all duration-150",
+            sidebarCollapsed && "justify-center",
+            active
+              ? activeClassName ?? "bg-sidebar-accent text-sidebar-primary font-medium"
+              : "text-sidebar-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
+          )}
+          title={sidebarCollapsed ? label : undefined}
+        >
+          <Icon className={cn("w-4 h-4 shrink-0", active && "stroke-[2.2]")} />
+          {!sidebarCollapsed && <span>{label}</span>}
+        </Link>
+      </li>
+    );
+  };
+
   return (
-    <aside
-      className={cn(
-        "fixed left-0 top-0 h-full z-40 flex flex-col border-r border-border bg-sidebar transition-all duration-300",
-        sidebarCollapsed ? "w-[60px]" : "w-[220px]"
-      )}
-    >
+    <aside className={cn(
+      "fixed left-0 top-0 h-full z-40 flex flex-col border-r border-sidebar-border bg-sidebar transition-all duration-300 ease-in-out",
+      sidebarCollapsed ? "w-[60px]" : "w-[220px]"
+    )}>
+
       {/* Logo */}
       <div className={cn(
-        "flex items-center gap-3 px-4 py-5 border-b border-border",
-        sidebarCollapsed && "justify-center px-2"
+        "flex items-center gap-3 px-4 py-5 border-b border-sidebar-border",
+        sidebarCollapsed && "justify-center px-3"
       )}>
-        <div className="w-8 h-8 rounded-lg bg-foreground flex items-center justify-center shrink-0">
+        <div className="w-8 h-8 rounded-xl bg-foreground flex items-center justify-center shrink-0 shadow-sm">
           <Brain className="w-4 h-4 text-background" />
         </div>
         {!sidebarCollapsed && (
-          <span className="font-bold text-sm tracking-tight text-sidebar-foreground">
-            ThoughtStack
-          </span>
+          <div>
+            <span className="font-bold text-sm tracking-tight text-sidebar-foreground leading-none block">
+              ThoughtStack
+            </span>
+            <span className="text-[10px] text-muted-foreground">Personal OS</span>
+          </div>
         )}
       </div>
 
-      {/* Nav sections */}
-      <nav className="flex-1 overflow-y-auto py-4 scrollbar-hide">
+      {/* Nav */}
+      <nav className="flex-1 overflow-y-auto py-4 scrollbar-hide space-y-5">
         {Object.entries(NAV).map(([section, items]) => (
-          <div key={section} className="mb-6">
+          <div key={section}>
             {!sidebarCollapsed && (
-              <p className="px-4 mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+              <p className="px-4 mb-1.5 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/60">
                 {section}
               </p>
             )}
             <ul className="space-y-0.5">
-              {items.map(({ href, icon: Icon, label }) => {
-                const active = pathname === href;
-                return (
-                  <li key={href}>
-                    <Link
-                      href={href}
-                      className={cn(
-                        "flex items-center gap-3 mx-2 px-2 py-2 rounded-lg text-sm transition-colors",
-                        sidebarCollapsed && "justify-center",
-                        active
-                          ? "bg-sidebar-accent text-sidebar-primary font-medium"
-                          : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                      )}
-                      title={sidebarCollapsed ? label : undefined}
-                    >
-                      <Icon className="w-4 h-4 shrink-0" />
-                      {!sidebarCollapsed && <span>{label}</span>}
-                    </Link>
-                  </li>
-                );
-              })}
+              {items.map((item) => <NavItem key={item.href} {...item} />)}
             </ul>
           </div>
         ))}
 
-        {/* Admin section — only visible to admins */}
+        {/* Admin section */}
         {isAdmin && (
-          <div className="mb-6">
+          <div>
             {!sidebarCollapsed && (
-              <p className="px-4 mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+              <p className="px-4 mb-1.5 text-[9px] font-bold uppercase tracking-widest text-blue-400/70">
                 Admin
               </p>
             )}
             <ul className="space-y-0.5">
-              <li>
-                <Link
-                  href="/admin"
-                  className={cn(
-                    "flex items-center gap-3 mx-2 px-2 py-2 rounded-lg text-sm transition-colors",
-                    sidebarCollapsed && "justify-center",
-                    pathname === "/admin"
-                      ? "bg-blue-500/20 text-blue-400 font-medium"
-                      : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                  )}
-                  title={sidebarCollapsed ? "Admin Panel" : undefined}
-                >
-                  <Shield className="w-4 h-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Admin Panel</span>}
-                </Link>
-              </li>
+              <NavItem
+                href="/admin"
+                icon={Shield}
+                label="Admin Panel"
+                activeClassName="bg-blue-500/15 text-blue-400 font-medium"
+              />
             </ul>
           </div>
         )}
       </nav>
 
-      {/* Bottom actions */}
+      {/* Bottom */}
       <div className={cn(
-        "border-t border-border p-3 flex flex-col gap-2",
-        sidebarCollapsed && "items-center"
+        "border-t border-sidebar-border p-2.5 space-y-1",
+        sidebarCollapsed && "flex flex-col items-center"
       )}>
-        {/* User row */}
+        {/* User pill */}
         {!sidebarCollapsed && (
-          <div className="flex items-center gap-2 px-2 py-1.5 mb-1">
-            <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-xs font-bold shrink-0 overflow-hidden">
+          <div className="flex items-center gap-2.5 px-2 py-2 rounded-xl">
+            <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center text-xs font-bold shrink-0 overflow-hidden ring-2 ring-border">
               {profile.avatar
+                // eslint-disable-next-line @next/next/no-img-element
                 ? <img src={profile.avatar} alt="avatar" className="w-full h-full object-cover" />
-                : profile.name.charAt(0).toUpperCase()}
+                : profile.name.charAt(0).toUpperCase()
+              }
             </div>
-            <span className="text-xs font-medium text-sidebar-foreground truncate flex-1">
-              {profile.name}
-            </span>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium text-sidebar-foreground truncate leading-none">{profile.name}</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{session?.user?.email ?? ""}</p>
+            </div>
           </div>
         )}
 
-        {/* Thoughts AI button */}
+        {/* Actions */}
         <Button
-          variant="ghost"
-          size={sidebarCollapsed ? "icon" : "sm"}
-          className={cn("w-full text-sidebar-foreground hover:bg-sidebar-accent", sidebarCollapsed && "w-9")}
+          variant="ghost" size={sidebarCollapsed ? "icon" : "sm"}
+          className={cn("w-full justify-start gap-2.5 text-sidebar-foreground hover:bg-sidebar-accent/60 rounded-xl text-sm", sidebarCollapsed && "w-9 justify-center")}
           onClick={toggleThoughtsPanel}
-          title="Open Thoughts AI"
         >
           <Brain className="w-4 h-4 shrink-0" />
-          {!sidebarCollapsed && <span className="ml-2">Thoughts AI</span>}
+          {!sidebarCollapsed && "Thoughts AI"}
         </Button>
 
-        {/* Theme toggle */}
         <Button
-          variant="ghost"
-          size={sidebarCollapsed ? "icon" : "sm"}
-          className={cn("w-full text-sidebar-foreground hover:bg-sidebar-accent", sidebarCollapsed && "w-9")}
+          variant="ghost" size={sidebarCollapsed ? "icon" : "sm"}
+          className={cn("w-full justify-start gap-2.5 text-sidebar-foreground hover:bg-sidebar-accent/60 rounded-xl text-sm", sidebarCollapsed && "w-9 justify-center")}
           onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-          title="Toggle theme"
         >
-          {theme === "dark"
-            ? <Sun className="w-4 h-4 shrink-0" />
-            : <Moon className="w-4 h-4 shrink-0" />}
-          {!sidebarCollapsed && (
-            <span className="ml-2">{theme === "dark" ? "Light mode" : "Dark mode"}</span>
-          )}
+          {theme === "dark" ? <Sun className="w-4 h-4 shrink-0" /> : <Moon className="w-4 h-4 shrink-0" />}
+          {!sidebarCollapsed && (theme === "dark" ? "Light mode" : "Dark mode")}
         </Button>
 
-        {/* Logout */}
         <Button
-          variant="ghost"
-          size={sidebarCollapsed ? "icon" : "sm"}
-          className={cn("w-full text-muted-foreground hover:text-destructive hover:bg-destructive/10", sidebarCollapsed && "w-9")}
+          variant="ghost" size={sidebarCollapsed ? "icon" : "sm"}
+          className={cn("w-full justify-start gap-2.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-xl text-sm", sidebarCollapsed && "w-9 justify-center")}
           onClick={handleLogout}
-          title="Sign out"
         >
           <LogOut className="w-4 h-4 shrink-0" />
-          {!sidebarCollapsed && <span className="ml-2">Sign out</span>}
+          {!sidebarCollapsed && "Sign out"}
         </Button>
 
         {/* Collapse toggle */}
         <Button
-          variant="ghost"
-          size="icon"
-          className="w-9 h-9 self-end text-muted-foreground hover:text-foreground hover:bg-sidebar-accent"
+          variant="ghost" size="icon"
+          className="w-8 h-8 self-end text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/60 rounded-xl ml-auto block"
           onClick={toggleSidebar}
-          title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
-          {sidebarCollapsed
-            ? <ChevronRight className="w-4 h-4" />
-            : <ChevronLeft className="w-4 h-4" />}
+          {sidebarCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
         </Button>
       </div>
     </aside>

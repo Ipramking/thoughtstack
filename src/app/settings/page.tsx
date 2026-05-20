@@ -1,161 +1,178 @@
 "use client";
 
 import { useTheme } from "next-themes";
-import { Settings, Sun, Moon, Trash2, Brain, Shield } from "lucide-react";
+import { Settings, Sun, Moon, Trash2, Brain, Shield, Check } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/ui/page-header";
 import { cn } from "@/lib/utils";
+import { toast } from "@/hooks/useToast";
+
+function SettingRow({ label, description, action }: {
+  label: string; description?: string; action: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-4 border-b border-border/60 last:border-0">
+      <div className="min-w-0">
+        <p className="text-sm font-medium">{label}</p>
+        {description && <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{description}</p>}
+      </div>
+      <div className="shrink-0">{action}</div>
+    </div>
+  );
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground/60 px-1 mb-1">
+      {children}
+    </p>
+  );
+}
 
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
   const { tasks, journals, skills, events } = useAppStore();
 
   function clearData(type: "tasks" | "journals" | "skills" | "events" | "all") {
-    if (!confirm(`Are you sure you want to clear ${type === "all" ? "ALL data" : type}? This cannot be undone.`)) return;
+    if (!confirm(`Clear ${type === "all" ? "ALL data" : type}? This cannot be undone.`)) return;
     const s = useAppStore.getState();
-    if (type === "tasks") [...s.tasks].forEach((t) => s.deleteTask(t.id));
-    else if (type === "journals") [...s.journals].forEach((j) => s.deleteJournal(j.id));
-    else if (type === "skills") [...s.skills].forEach((sk) => s.deleteSkill(sk.id));
-    else if (type === "events") [...s.events].forEach((e) => s.deleteEvent(e.id));
-    else if (type === "all") {
+    if (type === "tasks")    [...s.tasks].forEach((t) => s.deleteTask(t.id));
+    if (type === "journals") [...s.journals].forEach((j) => s.deleteJournal(j.id));
+    if (type === "skills")   [...s.skills].forEach((sk) => s.deleteSkill(sk.id));
+    if (type === "events")   [...s.events].forEach((e) => s.deleteEvent(e.id));
+    if (type === "all") {
       [...s.tasks].forEach((t) => s.deleteTask(t.id));
       [...s.journals].forEach((j) => s.deleteJournal(j.id));
       [...s.skills].forEach((sk) => s.deleteSkill(sk.id));
       [...s.events].forEach((e) => s.deleteEvent(e.id));
       s.clearMessages();
     }
+    toast.success(`${type === "all" ? "All data" : type} cleared`);
   }
 
   return (
-    <div className="min-h-screen p-6 space-y-6 animate-fade-in max-w-2xl">
-      <h1 className="text-2xl font-bold flex items-center gap-2">
-        <Settings className="w-6 h-6" /> Settings
-      </h1>
+    <div className="min-h-screen ambient-bg">
+      <div className="p-4 sm:p-6 space-y-6 page-enter max-w-2xl">
+        <PageHeader title="Settings" />
 
-      {/* Theme */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm flex items-center gap-2">
-            <Sun className="w-4 h-4" /> Appearance
-          </CardTitle>
-          <CardDescription>Choose your preferred color theme</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex gap-3">
-            {[
-              { value: "dark", label: "Dark", icon: Moon },
-              { value: "light", label: "Light", icon: Sun },
-            ].map(({ value, label, icon: Icon }) => (
-              <button
-                key={value}
-                onClick={() => setTheme(value)}
-                className={cn(
-                  "flex-1 flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all",
-                  theme === value
-                    ? "border-primary bg-primary/10"
-                    : "border-border hover:bg-muted"
-                )}
-              >
-                <Icon className="w-5 h-5" />
-                <span className="text-sm font-medium">{label}</span>
-              </button>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+        {/* Appearance */}
+        <div className="space-y-2">
+          <SectionLabel>Appearance</SectionLabel>
+          <Card>
+            <CardContent className="p-5">
+              <SettingRow
+                label="Theme"
+                description="Choose your preferred colour scheme"
+                action={
+                  <div className="flex gap-2">
+                    {[
+                      { value: "dark",  label: "Dark",  icon: Moon },
+                      { value: "light", label: "Light", icon: Sun  },
+                    ].map(({ value, label, icon: Icon }) => (
+                      <button
+                        key={value}
+                        onClick={() => setTheme(value)}
+                        className={cn(
+                          "flex items-center gap-2 px-3 py-2 rounded-xl border text-sm font-medium transition-all",
+                          theme === value
+                            ? "border-primary bg-primary/10 text-foreground"
+                            : "border-border hover:bg-muted text-muted-foreground"
+                        )}
+                      >
+                        <Icon className="w-3.5 h-3.5" />
+                        {label}
+                        {theme === value && <Check className="w-3 h-3 text-primary" />}
+                      </button>
+                    ))}
+                  </div>
+                }
+              />
+            </CardContent>
+          </Card>
+        </div>
 
-      {/* AI Settings */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm flex items-center gap-2">
-            <Brain className="w-4 h-4" /> Thoughts AI
-          </CardTitle>
-          <CardDescription>Configure your AI assistant</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3 text-sm">
-          <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-            <div>
-              <p className="font-medium">Claude API</p>
-              <p className="text-xs text-muted-foreground">
-                Set ANTHROPIC_API_KEY in .env.local to enable the full AI
-              </p>
-            </div>
-            <div className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
-              .env.local
-            </div>
-          </div>
-          <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-            <div>
-              <p className="font-medium">Rule-based fallback</p>
-              <p className="text-xs text-muted-foreground">
-                Always active — used when the API is unavailable
-              </p>
-            </div>
-            <div className="text-xs text-green-400 bg-green-500/10 px-2 py-1 rounded">Active</div>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-1"
-            onClick={() => useAppStore.getState().clearMessages()}
-          >
-            Clear chat history
-          </Button>
-        </CardContent>
-      </Card>
+        {/* Thoughts AI */}
+        <div className="space-y-2">
+          <SectionLabel>Thoughts AI</SectionLabel>
+          <Card>
+            <CardContent className="p-5 space-y-0 divide-y divide-border/60">
+              <SettingRow
+                label="Claude API"
+                description="Primary AI — set ANTHROPIC_API_KEY in Vercel"
+                action={
+                  <span className="text-xs font-medium text-muted-foreground bg-muted px-2.5 py-1 rounded-lg">
+                    .env.local
+                  </span>
+                }
+              />
+              <SettingRow
+                label="Gemini API"
+                description="Fallback when Claude is unavailable"
+                action={
+                  <span className="text-xs font-medium text-muted-foreground bg-muted px-2.5 py-1 rounded-lg">
+                    .env.local
+                  </span>
+                }
+              />
+              <SettingRow
+                label="Rule-based engine"
+                description="Always active — works offline, no API key needed"
+                action={
+                  <span className="text-xs font-medium text-green-400 bg-green-500/10 px-2.5 py-1 rounded-lg border border-green-500/20">
+                    Active
+                  </span>
+                }
+              />
+              <div className="pt-4">
+                <Button variant="outline" size="sm" className="rounded-xl gap-1.5"
+                  onClick={() => { useAppStore.getState().clearMessages(); toast.info("Chat history cleared"); }}>
+                  <Trash2 className="w-3.5 h-3.5" /> Clear chat history
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
 
-      {/* Data management */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm flex items-center gap-2">
-            <Shield className="w-4 h-4" /> Data Management
-          </CardTitle>
-          <CardDescription>
-            All data is stored locally in your browser. Clearing is permanent.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {[
-            { type: "tasks" as const, label: "Tasks", count: tasks.length },
-            { type: "journals" as const, label: "Journal entries", count: journals.length },
-            { type: "skills" as const, label: "Skills", count: skills.length },
-            { type: "events" as const, label: "Calendar events", count: events.length },
-          ].map(({ type, label, count }) => (
-            <div key={type} className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
-              <span className="text-sm">{label} <span className="text-muted-foreground">({count})</span></span>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-destructive hover:text-destructive gap-1"
-                onClick={() => clearData(type)}
-                disabled={count === 0}
-              >
-                <Trash2 className="w-3.5 h-3.5" /> Clear
-              </Button>
-            </div>
-          ))}
-          <div className="pt-2">
-            <Button
-              variant="destructive"
-              size="sm"
-              className="w-full gap-1"
-              onClick={() => clearData("all")}
-            >
-              <Trash2 className="w-4 h-4" /> Clear all data
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+        {/* Data */}
+        <div className="space-y-2">
+          <SectionLabel>Data Management</SectionLabel>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardDescription>All data is stored locally in your browser. Clearing is permanent.</CardDescription>
+            </CardHeader>
+            <CardContent className="p-5 pt-0 space-y-0 divide-y divide-border/60">
+              {[
+                { type: "tasks"    as const, label: "Tasks",           count: tasks.length    },
+                { type: "journals" as const, label: "Journal entries", count: journals.length  },
+                { type: "skills"   as const, label: "Skills",          count: skills.length    },
+                { type: "events"   as const, label: "Calendar events", count: events.length    },
+              ].map(({ type, label, count }) => (
+                <SettingRow key={type} label={label} description={`${count} ${count === 1 ? "item" : "items"} stored`}
+                  action={
+                    <Button variant="ghost" size="sm" className="rounded-xl text-destructive hover:text-destructive hover:bg-destructive/10 gap-1.5"
+                      onClick={() => clearData(type)} disabled={count === 0}>
+                      <Trash2 className="w-3.5 h-3.5" /> Clear
+                    </Button>
+                  }
+                />
+              ))}
+              <div className="pt-4">
+                <Button variant="destructive" size="sm" className="w-full rounded-xl gap-1.5" onClick={() => clearData("all")}>
+                  <Trash2 className="w-4 h-4" /> Clear all data
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
 
-      {/* About */}
-      <Card>
-        <CardContent className="p-4 text-center text-xs text-muted-foreground">
-          <p className="font-semibold text-foreground mb-1">ThoughtStack</p>
-          <p>Your AI-powered personal operating system</p>
-          <p className="mt-1">Built with Next.js · Zustand · Claude AI · Recharts</p>
-        </CardContent>
-      </Card>
+        {/* About */}
+        <div className="text-center py-4 text-xs text-muted-foreground space-y-1">
+          <p className="font-semibold text-foreground">ThoughtStack</p>
+          <p>AI-powered personal OS · Next.js · Supabase · Claude + Gemini</p>
+        </div>
+      </div>
     </div>
   );
 }
