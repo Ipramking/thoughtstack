@@ -1,5 +1,9 @@
-import { auth } from "@/auth";
-import { NextResponse } from "next/server";
+import NextAuth from "next-auth";
+import { authConfig } from "@/auth.config";
+
+// Use the EDGE-SAFE config — no bcrypt, no Neon, no Node.js APIs.
+// The middleware only needs to verify the JWT, not run the credentials check.
+const { auth } = NextAuth(authConfig);
 
 const PUBLIC = ["/auth", "/api/auth"];
 
@@ -11,17 +15,14 @@ export default auth((req) => {
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon");
 
-  if (isPublic) return NextResponse.next();
+  if (isPublic) return;
 
-  // Not logged in → send to sign-in page with callbackUrl
   if (!req.auth) {
     const loginUrl = req.nextUrl.clone();
     loginUrl.pathname = "/auth";
     loginUrl.searchParams.set("callbackUrl", pathname);
-    return NextResponse.redirect(loginUrl);
+    return Response.redirect(loginUrl);
   }
-
-  return NextResponse.next();
 });
 
 export const config = {
