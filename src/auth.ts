@@ -1,24 +1,9 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import { timingSafeEqual } from "crypto";
+import bcrypt from "bcryptjs";
+import { findUserByEmail, initDb } from "@/lib/db";
 
-/**
- * ThoughtStack Auth — single-user credentials.
- *
- * Set these in Vercel → Settings → Environment Variables:
- *   ADMIN_EMAIL     = your email address
- *   ADMIN_PASSWORD  = your chosen password
- *   NEXTAUTH_SECRET = any long random string (openssl rand -base64 32)
- */
-function safeEqual(a: string, b: string): boolean {
-  try {
-    const ba = Buffer.from(a.padEnd(64));
-    const bb = Buffer.from(b.padEnd(64));
-    return timingSafeEqual(ba.slice(0, 64), bb.slice(0, 64)) && a.length === b.length;
-  } catch {
-    return false;
-  }
-}
+let dbReady = false;
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
@@ -27,28 +12,28 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         email:    { label: "Email",    type: "email"    },
         password: { label: "Password", type: "password" },
       },
+
       async authorize(credentials) {
         const email    = (credentials?.email    as string ?? "").toLowerCase().trim();
         const password = (credentials?.password as string ?? "");
 
-        const adminEmail    = (process.env.ADMIN_EMAIL    ?? "").toLowerCase().trim();
-        const adminPassword = (process.env.ADMIN_PASSWORD ?? "");
+        // Ensure DB + admin seed on first call
+        if (!dbReady) { await initDb(); dbReady = true; }
 
-        if (!adminEmail || !adminPassword) {
-          // No credentials configured — allow first-time access so user can set up
-          if (email && password) {
-            return { id: "admin", name: email.split("@")[0], email };
-          }
-          return null;
-        }
+        const user = await findUserByEmail(email);
+        if (!user) return null;
 
-        const emailOk    = safeEqual(email, adminEmail);
-        const passwordOk = safeEqual(password, adminPassword);
+        const passwordOk = await bcrypt.compare(password, user.password_hash as string);
+        if (!passwordOk) return null;
 
-        if (!emailOk || !passwordOk) return null;
-
-        const name = process.env.ADMIN_NAME || adminEmail.split("@")[0];
-        return { id: "admin", name, email };
+        // Return status so the client can show a helpful error
+        return {
+          id:     user.id as string,
+          name:   user.name as string,
+          email:  user.email as string,
+          role:   user.role as string,
+          status: user.status as string,
+        };
       },
     }),
   ],
@@ -65,12 +50,28 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
   callbacks: {
     async jwt({ token, user }) {
-      if (user) token.name = user.name;
+      if (user) {
+        token.role   = (user as { role?: string }).role ?? "user";
+        token.status = (user as { status?: string }).status ?? "pending";
+      }
       return token;
     },
+
     async session({ session, token }) {
-      if (token?.name) session.user.name = token.name as string;
+      if (token) {
+        session.user.role   = token.role   as string;
+        session.user.status = token.status as string;
+      }
       return session;
+    },
+
+    async signIn({ user }) {
+      const u = user as { status?: string };
+      // Block sign-in for non-approved accounts
+      if (u.status && u.status !== "approved") {
+        throw new Error(`status:${u.status}`);
+      }
+      return true;
     },
   },
 

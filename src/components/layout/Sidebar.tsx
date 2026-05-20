@@ -3,11 +3,11 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
-import { signOut } from "next-auth/react";
+import { signOut, useSession } from "next-auth/react";
 import {
   Home, CheckSquare, BookOpen, Zap, Calendar, User,
   Settings, Download, Brain, ChevronLeft, ChevronRight,
-  Sun, Moon, BarChart2, LogOut,
+  Sun, Moon, BarChart2, LogOut, Shield,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/useAppStore";
@@ -27,7 +27,7 @@ const NAV = {
   ],
   System: [
     { href: "/settings", icon: Settings, label: "Settings" },
-    { href: "/export", icon: Download, label: "Export" },
+    { href: "/export",   icon: Download, label: "Export"   },
   ],
 };
 
@@ -35,6 +35,8 @@ export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { theme, setTheme } = useTheme();
+  const { data: session } = useSession();
+  const isAdmin = session?.user?.role === "admin";
   const { sidebarCollapsed, toggleSidebar, toggleThoughtsPanel, profile } = useAppStore();
 
   async function handleLogout() {
@@ -100,6 +102,35 @@ export function Sidebar() {
             </ul>
           </div>
         ))}
+
+        {/* Admin section — only visible to admins */}
+        {isAdmin && (
+          <div className="mb-6">
+            {!sidebarCollapsed && (
+              <p className="px-4 mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                Admin
+              </p>
+            )}
+            <ul className="space-y-0.5">
+              <li>
+                <Link
+                  href="/admin"
+                  className={cn(
+                    "flex items-center gap-3 mx-2 px-2 py-2 rounded-lg text-sm transition-colors",
+                    sidebarCollapsed && "justify-center",
+                    pathname === "/admin"
+                      ? "bg-blue-500/20 text-blue-400 font-medium"
+                      : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                  )}
+                  title={sidebarCollapsed ? "Admin Panel" : undefined}
+                >
+                  <Shield className="w-4 h-4 shrink-0" />
+                  {!sidebarCollapsed && <span>Admin Panel</span>}
+                </Link>
+              </li>
+            </ul>
+          </div>
+        )}
       </nav>
 
       {/* Bottom actions */}
