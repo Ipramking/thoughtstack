@@ -22,6 +22,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { PageHeader } from "@/components/ui/page-header";
 import { cn } from "@/lib/utils";
 
 const EVENT_COLORS: Record<EventType, string> = {
@@ -116,26 +117,22 @@ export default function CalendarPage() {
   }
 
   return (
-    <div className="min-h-screen p-6 space-y-6 animate-fade-in">
-      {/* Header */}
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <CalIcon className="w-6 h-6 text-purple-400" /> Calendar
-          </h1>
-          <p className="text-muted-foreground text-sm mt-0.5">
-            {events.length} events · {tasks.filter((t) => t.dueDate).length} tasks with dates
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={toggleThoughtsPanel} className="gap-1">
-            <Brain className="w-4 h-4" /> AI schedule
-          </Button>
-          <Button onClick={() => openCreate()} className="gap-1">
-            <Plus className="w-4 h-4" /> New event
-          </Button>
-        </div>
-      </div>
+    <div className="min-h-screen ambient-bg">
+      <div className="px-4 pt-4 pb-nav sm:px-6 sm:pt-6 md:pb-6 space-y-5 page-enter">
+      <PageHeader
+        title="Calendar"
+        subtitle={`${events.length} events · ${tasks.filter((t) => t.dueDate).length} tasks with dates`}
+        action={
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={toggleThoughtsPanel} className="gap-1.5 rounded-xl">
+              <Brain className="w-3.5 h-3.5" /> AI
+            </Button>
+            <Button onClick={() => openCreate()} size="sm" className="gap-1.5 rounded-xl">
+              <Plus className="w-3.5 h-3.5" /> New event
+            </Button>
+          </div>
+        }
+      />
 
       <Tabs value={view} onValueChange={(v) => setView(v as "month" | "agenda")}>
         <TabsList>
@@ -367,6 +364,7 @@ export default function CalendarPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      </div>
     </div>
   );
 }

@@ -54,7 +54,7 @@ export default function SettingsPage() {
 
   return (
     <div className="min-h-screen ambient-bg">
-      <div className="p-4 sm:p-6 space-y-6 page-enter max-w-2xl">
+      <div className="px-4 pt-4 pb-nav sm:px-6 sm:pt-6 md:pb-6 space-y-6 page-enter max-w-2xl">
         <PageHeader title="Settings" />
 
         {/* Appearance */}

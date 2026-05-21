@@ -18,6 +18,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { PageHeader } from "@/components/ui/page-header";
 import { cn, generateId } from "@/lib/utils";
 
 const SKILL_CATEGORIES: SkillCategory[] = [
@@ -108,26 +109,22 @@ export default function SkillsPage() {
   }
 
   return (
-    <div className="min-h-screen p-6 space-y-6 animate-fade-in">
-      {/* Header */}
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Zap className="w-6 h-6 text-yellow-400" /> Skills & Learning
-          </h1>
-          <p className="text-muted-foreground text-sm mt-0.5">
-            {skills.length} skill{skills.length !== 1 ? "s" : ""} tracked · level up every day
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={toggleThoughtsPanel} className="gap-1">
-            <Brain className="w-4 h-4" /> Get recommendations
-          </Button>
-          <Button onClick={() => setAddOpen(true)} className="gap-1">
-            <Plus className="w-4 h-4" /> Track skill
-          </Button>
-        </div>
-      </div>
+    <div className="min-h-screen ambient-bg">
+      <div className="px-4 pt-4 pb-nav sm:px-6 sm:pt-6 md:pb-6 space-y-6 page-enter">
+      <PageHeader
+        title="Skills & Learning"
+        subtitle={`${skills.length} skill${skills.length !== 1 ? "s" : ""} tracked · level up every day`}
+        action={
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={toggleThoughtsPanel} className="gap-1.5 rounded-xl">
+              <Brain className="w-3.5 h-3.5" /> AI
+            </Button>
+            <Button onClick={() => setAddOpen(true)} size="sm" className="gap-1.5 rounded-xl">
+              <Plus className="w-3.5 h-3.5" /> Track skill
+            </Button>
+          </div>
+        }
+      />
 
       {/* Stats */}
       {skills.length > 0 && (
@@ -257,6 +254,7 @@ export default function SkillsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      </div>
     </div>
   );
 }
@@ -277,22 +275,18 @@ function SkillDetail({
   };
 
   return (
-    <div className="min-h-screen p-6 space-y-6 animate-fade-in">
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="sm" onClick={onBack}>← Back</Button>
-        <div className="flex items-center gap-3 flex-1">
-          <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center text-xl">
-            {CATEGORY_ICONS[skill.category]}
-          </div>
-          <div>
-            <h1 className="text-xl font-bold">{skill.name}</h1>
-            <p className="text-xs text-muted-foreground">{skill.category}</p>
-          </div>
-        </div>
-        <Button variant="ghost" size="icon" onClick={onDelete} className="text-destructive hover:text-destructive">
-          <Trash2 className="w-4 h-4" />
-        </Button>
-      </div>
+    <div className="min-h-screen ambient-bg">
+      <div className="px-4 pt-4 pb-nav sm:px-6 sm:pt-6 md:pb-6 space-y-6 page-enter">
+      <PageHeader
+        title={skill.name}
+        subtitle={skill.category}
+        onBack={onBack}
+        action={
+          <Button variant="ghost" size="icon" onClick={onDelete} className="rounded-xl text-destructive hover:text-destructive hover:bg-destructive/10">
+            <Trash2 className="w-4 h-4" />
+          </Button>
+        }
+      />
 
       {/* XP card */}
       <Card>
@@ -369,6 +363,7 @@ function SkillDetail({
           ))}
         </TabsContent>
       </Tabs>
+      </div>
     </div>
   );
 }

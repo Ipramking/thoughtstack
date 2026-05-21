@@ -11,8 +11,10 @@ import {
 } from "recharts";
 import { useAppStore } from "@/store/useAppStore";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
+import { PageHeader } from "@/components/ui/page-header";
 import { cn } from "@/lib/utils";
 import { format, subDays, eachDayOfInterval } from "date-fns";
 
@@ -87,24 +89,17 @@ export default function AnalyticsPage() {
   }, [tasks]);
 
   return (
-    <div className="min-h-screen p-6 space-y-6 animate-fade-in">
-      {/* Header */}
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <BarChart2 className="w-6 h-6 text-blue-400" /> Analytics
-          </h1>
-          <p className="text-muted-foreground text-sm mt-0.5">
-            Your personal performance overview
-          </p>
-        </div>
-        <button
-          onClick={toggleThoughtsPanel}
-          className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors px-3 py-2 rounded-lg border border-border hover:bg-muted"
-        >
-          <Brain className="w-4 h-4" /> Weekly report
-        </button>
-      </div>
+    <div className="min-h-screen ambient-bg">
+      <div className="px-4 pt-4 pb-nav sm:px-6 sm:pt-6 md:pb-6 space-y-5 page-enter">
+      <PageHeader
+        title="Analytics"
+        subtitle="Your personal performance overview"
+        action={
+          <Button variant="outline" size="sm" onClick={toggleThoughtsPanel} className="gap-1.5 rounded-xl">
+            <Brain className="w-3.5 h-3.5" /> Weekly report
+          </Button>
+        }
+      />
 
       {/* KPI row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -384,6 +379,7 @@ export default function AnalyticsPage() {
           )}
         </TabsContent>
       </Tabs>
+      </div>
     </div>
   );
 }

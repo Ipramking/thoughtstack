@@ -93,7 +93,7 @@ export default function TasksPage() {
 
   return (
     <div className="min-h-screen ambient-bg">
-      <div className="p-4 sm:p-6 space-y-5 page-enter">
+      <div className="px-4 pt-4 pb-nav sm:px-6 sm:pt-6 md:pb-6 space-y-5 page-enter">
         <PageHeader
           title="Task Manager"
           subtitle={`${stats.done}/${stats.total} completed · ${stats.today} due today`}

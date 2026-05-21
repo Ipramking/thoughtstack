@@ -56,10 +56,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </div>
 
       <MainContentInner>
-        {/* Extra bottom padding on mobile so content clears the bottom nav */}
-        <div className="pb-20 md:pb-0 min-h-full">
-          {children}
-        </div>
+        {children}
       </MainContentInner>
 
       <ThoughtsPanel />

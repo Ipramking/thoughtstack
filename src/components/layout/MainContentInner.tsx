@@ -9,12 +9,14 @@ export function MainContentInner({ children }: { children: React.ReactNode }) {
   return (
     <main
       className={cn(
-        "flex-1 overflow-y-auto transition-all duration-300",
-        // On mobile: no sidebar margin. On md+: respect sidebar width.
-        "ml-0",
+        "flex-1 min-h-dvh overflow-y-auto overflow-x-hidden transition-[margin] duration-300 ease-in-out",
+        /* Mobile: always full width — no sidebar offset */
+        "ml-0 mr-0",
+        /* md+: sidebar offset */
         "md:ml-[220px]",
         sidebarCollapsed && "md:ml-[60px]",
-        thoughtsPanelOpen ? "mr-[360px]" : "mr-0"
+        /* md+: thoughts panel offset */
+        thoughtsPanelOpen ? "md:mr-[360px]" : "md:mr-0"
       )}
     >
       {children}

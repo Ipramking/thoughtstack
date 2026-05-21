@@ -27,8 +27,8 @@ export const metadata: Metadata = {
     title: "ThoughtStack",
   },
   icons: {
-    icon: "/icon-192.png",
-    apple: "/icon-192.png",
+    icon: "/icon",
+    apple: "/icon",
   },
 };
 

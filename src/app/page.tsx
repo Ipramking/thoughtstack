@@ -57,7 +57,7 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen ambient-bg">
-      <div className="p-4 sm:p-6 space-y-6 page-enter">
+      <div className="px-4 pt-4 pb-nav sm:px-6 sm:pt-6 md:pb-6 space-y-6 page-enter">
 
         {/* ── Hero header ── */}
         <div className="flex items-start justify-between gap-4 pt-2">
