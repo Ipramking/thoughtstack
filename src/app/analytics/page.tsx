@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import {
-  BarChart2, TrendingUp, CheckCircle2, BookOpen, Zap,
+  TrendingUp, CheckCircle2, BookOpen, Zap,
   Brain, Smile, Activity, Calendar, Target,
 } from "lucide-react";
 import {

@@ -224,7 +224,7 @@ export default function CalendarPage() {
 
             {/* Day panel */}
             <div>
-              <Card className="sticky top-6">
+              <Card className="md:sticky md:top-6">
                 <CardHeader className="pb-2">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-sm">

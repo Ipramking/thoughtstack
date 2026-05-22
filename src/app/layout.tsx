@@ -10,11 +10,18 @@ import { SessionWrapper } from "@/components/layout/SessionWrapper";
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export const viewport: Viewport = {
-  themeColor: "#0d0d0d",
+  themeColor: [
+    { media: "(prefers-color-scheme: dark)",  color: "#0d0d0d" },
+    { media: "(prefers-color-scheme: light)", color: "#f9f9f9" },
+  ],
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
+  // Shrinks the visual viewport when the soft keyboard appears,
+  // so fixed/absolute positioned elements (ThoughtsPanel input) stay visible
+  viewportFit: "cover",
+  interactiveWidget: "resizes-visual",
 };
 
 export const metadata: Metadata = {
