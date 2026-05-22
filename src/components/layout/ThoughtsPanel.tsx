@@ -1,78 +1,100 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import {
   Brain, X, Send, Loader2, Sparkles, Zap, Bot,
   ChevronDown, Trash2,
 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { callThoughts } from "@/lib/thoughts-ai";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { ThoughtsAction } from "@/types";
+import { ThoughtsAction, ThoughtsContext } from "@/types";
 import { toast } from "@/hooks/useToast";
+import { format, isToday } from "date-fns";
 
-// ── Provider badge config ─────────────────────────────────────────────────────
 const PROVIDER_BADGE = {
-  claude: { label: "Claude",   className: "bg-orange-500/20 text-orange-400 border-orange-500/30", icon: Brain },
-  gemini: { label: "Gemini",   className: "bg-blue-500/20 text-blue-400 border-blue-500/30",       icon: Zap   },
-  local:  { label: "Local AI", className: "bg-muted text-muted-foreground border-border",           icon: Bot   },
+  claude: { label: "Claude",   cls: "bg-orange-500/20 text-orange-400 border-orange-500/30", icon: Brain },
+  gemini: { label: "Gemini",   cls: "bg-blue-500/20 text-blue-400 border-blue-500/30",       icon: Zap   },
+  local:  { label: "Local AI", cls: "bg-muted text-muted-foreground border-border",           icon: Bot   },
 };
 
-// ── Quick-prompt suggestions ─────────────────────────────────────────────────
 const QUICK_PROMPTS = [
-  "What tasks do I have today?",
-  "Help me plan my week",
-  "Add a task for tomorrow",
+  "What should I focus on today?",
   "How am I doing this week?",
-  "Suggest a new skill to learn",
+  "Which habits haven't I done today?",
+  "Help me plan tomorrow",
+  "Add a task for me",
 ];
 
 export function ThoughtsPanel() {
+  const store = useAppStore();
   const {
     thoughtsPanelOpen, toggleThoughtsPanel,
     messages, addMessage, clearMessages,
     addTask, addEvent,
-  } = useAppStore();
+    tasks, events, journals, habits, habitLogs, skills,
+    isHabitDone, getHabitStreak,
+  } = store;
 
   const [input,        setInput]        = useState("");
   const [loading,      setLoading]      = useState(false);
   const [lastProvider, setLastProvider] = useState<"claude" | "gemini" | "local" | null>(null);
 
-  const bottomRef  = useRef<HTMLDivElement>(null);
-  const inputRef   = useRef<HTMLTextAreaElement>(null);
-  const panelRef   = useRef<HTMLDivElement>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const inputRef  = useRef<HTMLTextAreaElement>(null);
 
-  // Scroll to bottom whenever messages change
+  // Build rich context from current store state
+  const context = useMemo((): ThoughtsContext => {
+    const todayStr = format(new Date(), "yyyy-MM-dd");
+    return {
+      todayTasks: tasks
+        .filter((t) => t.dueDate === todayStr || (t.status !== "done" && !t.dueDate))
+        .slice(0, 10)
+        .map((t) => ({ title: t.title, priority: t.priority, status: t.status, dueTime: t.dueTime })),
+      todayEvents: events
+        .filter((e) => e.date === todayStr)
+        .map((e) => ({ title: e.title, startTime: e.startTime, type: e.type })),
+      recentJournals: journals.slice(0, 3).map((j) => ({
+        title: j.title, mood: j.mood, date: j.createdAt.split("T")[0],
+      })),
+      habits: habits.map((h) => ({
+        name: h.name,
+        doneToday: isHabitDone(h.id, todayStr),
+        streak: getHabitStreak(h.id),
+      })),
+      stats: {
+        tasksTotal: tasks.length,
+        tasksDone:  tasks.filter((t) => t.status === "done").length,
+        skillCount: skills.length,
+      },
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tasks, events, journals, habits, habitLogs, skills]);
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Focus input when panel opens
   useEffect(() => {
-    if (thoughtsPanelOpen) {
-      setTimeout(() => inputRef.current?.focus(), 350);
-    }
+    if (thoughtsPanelOpen) setTimeout(() => inputRef.current?.focus(), 350);
   }, [thoughtsPanelOpen]);
 
-  // Close on Escape
   useEffect(() => {
     if (!thoughtsPanelOpen) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") toggleThoughtsPanel();
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
+    const h = (e: KeyboardEvent) => { if (e.key === "Escape") toggleThoughtsPanel(); };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
   }, [thoughtsPanelOpen, toggleThoughtsPanel]);
 
   async function handleSend(text = input.trim()) {
     if (!text || loading) return;
     setInput("");
+    if (inputRef.current) { inputRef.current.style.height = "40px"; }
     addMessage({ role: "user", content: text });
     setLoading(true);
     try {
       const history = messages.slice(-10).map((m) => ({ role: m.role, content: m.content }));
-      const res = await callThoughts(text, history);
+      const res = await callThoughts(text, history, context);
       setLastProvider((res.provider ?? "local") as "claude" | "gemini" | "local");
       addMessage({ role: "assistant", content: res.reply, actions: res.actions });
     } catch {
@@ -85,25 +107,12 @@ export function ThoughtsPanel() {
   function applyAction(action: ThoughtsAction) {
     if (action.type === "create_task") {
       const d = action.data as { title: string; priority?: string; dueDate?: string; dueTime?: string };
-      addTask({
-        title: d.title,
-        priority: (d.priority as "low" | "medium" | "high" | "critical") ?? "medium",
-        status: "todo",
-        dueDate: d.dueDate,
-        dueTime: d.dueTime,
-        reminder: false,
-      });
+      addTask({ title: d.title, priority: (d.priority as "low"|"medium"|"high"|"critical") ?? "medium", status: "todo", dueDate: d.dueDate, dueTime: d.dueTime, reminder: false });
       addMessage({ role: "assistant", content: `✓ Task created: "${d.title}"` });
       toast.success("Task created");
     } else if (action.type === "create_event") {
       const d = action.data as { title: string; date: string; startTime?: string; type?: string };
-      addEvent({
-        title: d.title,
-        date: d.date,
-        startTime: d.startTime,
-        type: (d.type as "meeting" | "task" | "reminder" | "personal" | "study") ?? "meeting",
-        reminder: false,
-      });
+      addEvent({ title: d.title, date: d.date, startTime: d.startTime, type: (d.type as "meeting"|"task"|"reminder"|"personal"|"study") ?? "meeting", reminder: false });
       addMessage({ role: "assistant", content: `✓ Added to calendar: "${d.title}"` });
       toast.success("Event added");
     } else {
@@ -111,19 +120,15 @@ export function ThoughtsPanel() {
     }
   }
 
-  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  }
-
-  // Auto-grow textarea
   function handleInput(e: React.ChangeEvent<HTMLTextAreaElement>) {
     setInput(e.target.value);
     const el = e.target;
     el.style.height = "auto";
     el.style.height = Math.min(el.scrollHeight, 120) + "px";
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
   }
 
   if (!thoughtsPanelOpen) return null;
@@ -132,33 +137,26 @@ export function ThoughtsPanel() {
 
   return (
     <>
-      {/* ── Backdrop (mobile only) ─────────────────────────────────────────── */}
+      {/* Backdrop */}
       <div
         className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm md:hidden animate-fade-in"
         onClick={toggleThoughtsPanel}
         aria-hidden
       />
 
-      {/* ── Panel ─────────────────────────────────────────────────────────── */}
-      <div
-        ref={panelRef}
-        className={cn(
-          "fixed z-50 flex flex-col bg-background shadow-2xl",
-          // Mobile: bottom sheet slides up, sits above the bottom nav
-          "bottom-0 left-0 right-0 rounded-t-3xl border border-b-0 border-border",
-          "h-[88dvh] animate-slide-up",
-          // Desktop: right-side panel
-          "md:bottom-0 md:right-0 md:top-0 md:left-auto md:h-full",
-          "md:w-[380px] md:rounded-none md:border-y-0 md:border-r-0 md:border-l",
-          "md:animate-slide-right",
-        )}
-      >
-        {/* ── Drag handle (mobile) ─────────────────────────────────────────── */}
+      {/* Panel */}
+      <div className={cn(
+        "fixed z-50 flex flex-col bg-background shadow-2xl",
+        "bottom-0 left-0 right-0 rounded-t-3xl border border-b-0 border-border h-[88dvh] animate-slide-up",
+        "md:bottom-0 md:right-0 md:top-0 md:left-auto md:h-full md:w-[380px]",
+        "md:rounded-none md:border-y-0 md:border-r-0 md:border-l md:animate-slide-right",
+      )}>
+        {/* Drag handle */}
         <div className="flex justify-center pt-2.5 pb-1 md:hidden shrink-0">
           <div className="w-9 h-1 rounded-full bg-muted-foreground/25" />
         </div>
 
-        {/* ── Header ──────────────────────────────────────────────────────── */}
+        {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl bg-foreground flex items-center justify-center shrink-0">
@@ -167,84 +165,68 @@ export function ThoughtsPanel() {
             <div>
               <p className="font-semibold text-sm leading-none">Thoughts AI</p>
               {providerInfo ? (
-                <span className={cn(
-                  "inline-flex items-center gap-1 text-[10px] font-medium mt-0.5",
-                  "px-1.5 py-0.5 rounded-full border",
-                  providerInfo.className
-                )}>
+                <span className={cn("inline-flex items-center gap-1 text-[10px] font-medium mt-0.5 px-1.5 py-0.5 rounded-full border", providerInfo.cls)}>
                   <providerInfo.icon className="w-2.5 h-2.5" />
                   {providerInfo.label}
                 </span>
               ) : (
-                <p className="text-[10px] text-muted-foreground mt-0.5">Your AI assistant</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">Context-aware AI assistant</p>
               )}
             </div>
           </div>
-
           <div className="flex items-center gap-1">
             {messages.length > 0 && (
-              <button
-                onClick={() => { clearMessages(); setLastProvider(null); }}
-                className="touch-target rounded-xl hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-                title="Clear chat"
-              >
+              <button onClick={() => { clearMessages(); setLastProvider(null); }}
+                className="touch-target rounded-xl hover:bg-muted transition-colors text-muted-foreground hover:text-foreground">
                 <Trash2 className="w-4 h-4" />
               </button>
             )}
-            <button
-              onClick={toggleThoughtsPanel}
-              className="touch-target rounded-xl hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-            >
+            <button onClick={toggleThoughtsPanel}
+              className="touch-target rounded-xl hover:bg-muted transition-colors text-muted-foreground hover:text-foreground">
               <ChevronDown className="w-5 h-5 md:hidden" />
               <X className="w-4 h-4 hidden md:block" />
             </button>
           </div>
         </div>
 
-        {/* ── Messages ─────────────────────────────────────────────────────── */}
-        {/* min-h-0 is CRITICAL — without it flex-1 won't shrink and input gets pushed off */}
+        {/* Messages — min-h-0 is critical for flex shrink */}
         <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain scrollbar-hide">
           <div className="p-4 space-y-4">
 
-            {/* Empty state */}
             {messages.length === 0 && (
-              <div className="flex flex-col items-center text-center pt-6 pb-2">
+              <div className="flex flex-col items-center text-center pt-4 pb-2">
                 <div className="w-14 h-14 rounded-2xl bg-foreground flex items-center justify-center mb-4 shadow-lg">
                   <Brain className="w-7 h-7 text-background" />
                 </div>
-                <p className="text-base font-bold tracking-tight">Hey, I&apos;m Thoughts</p>
-                <p className="text-xs text-muted-foreground mt-1.5 max-w-[220px] leading-relaxed">
-                  Your AI assistant for tasks, plans, ideas, and anything on your mind.
+                <p className="text-base font-bold">Hey, I&apos;m Thoughts</p>
+                <p className="text-xs text-muted-foreground mt-1 max-w-[220px] leading-relaxed">
+                  I know your tasks, habits, and schedule — ask me anything.
                 </p>
-
-                {/* AI chain */}
-                <div className="flex items-center gap-1.5 mt-4 text-[10px] font-medium">
-                  <span className="flex items-center gap-1 px-2 py-1 rounded-full bg-orange-500/10 text-orange-400 border border-orange-500/20">
-                    <Brain className="w-3 h-3" /> Claude
-                  </span>
-                  <span className="text-muted-foreground">→</span>
-                  <span className="flex items-center gap-1 px-2 py-1 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">
-                    <Zap className="w-3 h-3" /> Gemini
-                  </span>
-                  <span className="text-muted-foreground">→</span>
-                  <span className="flex items-center gap-1 px-2 py-1 rounded-full bg-muted text-muted-foreground border border-border">
-                    <Bot className="w-3 h-3" /> Local
-                  </span>
+                <div className="flex items-center gap-1.5 mt-3 text-[10px] font-medium">
+                  {(["claude", "gemini", "local"] as const).map((p, i) => {
+                    const b = PROVIDER_BADGE[p];
+                    return (
+                      <span key={p} className="flex items-center gap-1">
+                        {i > 0 && <span className="text-muted-foreground">→</span>}
+                        <span className={cn("flex items-center gap-1 px-2 py-1 rounded-full border", b.cls)}>
+                          <b.icon className="w-3 h-3" /> {b.label}
+                        </span>
+                      </span>
+                    );
+                  })}
                 </div>
-
-                {/* Quick-prompt chips */}
-                <div className="mt-5 flex flex-col gap-1.5 w-full max-w-[280px]">
+                {/* Context snapshot */}
+                <div className="mt-4 w-full max-w-[280px] bg-muted/40 rounded-xl p-3 text-left space-y-1">
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Your context today</p>
+                  <p className="text-xs text-muted-foreground">📋 {context.todayTasks.filter(t => t.status !== "done").length} tasks pending</p>
+                  <p className="text-xs text-muted-foreground">📅 {context.todayEvents.length} events scheduled</p>
+                  <p className="text-xs text-muted-foreground">✅ {context.habits.filter(h => h.doneToday).length}/{context.habits.length} habits done</p>
+                </div>
+                {/* Quick prompts */}
+                <div className="mt-4 flex flex-col gap-1.5 w-full max-w-[280px]">
                   {QUICK_PROMPTS.map((p) => (
-                    <button
-                      key={p}
-                      onClick={() => handleSend(p)}
-                      className={cn(
-                        "text-left text-xs px-3.5 py-2.5 rounded-xl border border-border",
-                        "hover:bg-muted hover:border-border/80 transition-colors",
-                        "text-muted-foreground hover:text-foreground",
-                        "flex items-center gap-2"
-                      )}
-                    >
+                    <button key={p} onClick={() => handleSend(p)}
+                      className="text-left text-xs px-3.5 py-2.5 rounded-xl border border-border hover:bg-muted transition-colors text-muted-foreground hover:text-foreground flex items-center gap-2">
                       <Sparkles className="w-3 h-3 shrink-0 text-muted-foreground/60" />
                       {p}
                     </button>
@@ -253,38 +235,21 @@ export function ThoughtsPanel() {
               </div>
             )}
 
-            {/* Message bubbles */}
             {messages.map((msg) => (
-              <div
-                key={msg.id}
-                className={cn(
-                  "flex flex-col gap-1.5",
-                  msg.role === "user" ? "items-end" : "items-start"
-                )}
-              >
+              <div key={msg.id} className={cn("flex flex-col gap-1.5", msg.role === "user" ? "items-end" : "items-start")}>
                 <div className={cn(
-                  "max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed",
+                  "max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap",
                   msg.role === "user"
                     ? "bg-primary text-primary-foreground rounded-br-sm"
                     : "bg-muted text-foreground rounded-bl-sm"
                 )}>
                   {msg.content}
                 </div>
-
-                {/* Action buttons */}
                 {msg.actions && msg.actions.length > 0 && (
                   <div className="flex flex-col gap-1.5 w-full max-w-[85%]">
                     {msg.actions.map((action, i) => (
-                      <button
-                        key={i}
-                        onClick={() => applyAction(action)}
-                        className={cn(
-                          "text-left text-xs px-3.5 py-3 rounded-xl",
-                          "border border-border hover:bg-accent hover:border-border/60",
-                          "transition-colors flex items-center gap-2 min-h-[44px]",
-                          "font-medium"
-                        )}
-                      >
+                      <button key={i} onClick={() => applyAction(action)}
+                        className="text-left text-xs px-3.5 py-3 rounded-xl border border-border hover:bg-accent transition-colors flex items-center gap-2 min-h-[44px] font-medium">
                         <Sparkles className="w-3.5 h-3.5 text-primary shrink-0" />
                         {action.label}
                       </button>
@@ -294,13 +259,12 @@ export function ThoughtsPanel() {
               </div>
             ))}
 
-            {/* Typing indicator */}
             {loading && (
               <div className="flex items-start gap-2.5">
                 <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center shrink-0 mt-0.5">
                   <Brain className="w-3 h-3 text-muted-foreground" />
                 </div>
-                <div className="bg-muted rounded-2xl rounded-bl-sm px-3.5 py-2.5 flex items-center gap-1.5">
+                <div className="bg-muted rounded-2xl rounded-bl-sm px-3.5 py-3 flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:0ms]" />
                   <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:150ms]" />
                   <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:300ms]" />
@@ -312,7 +276,7 @@ export function ThoughtsPanel() {
           </div>
         </div>
 
-        {/* ── Input ──────────────────────────────────────────────────────── */}
+        {/* Input */}
         <div className="shrink-0 border-t border-border bg-background/95 backdrop-blur-sm">
           <div className="p-3 pb-safe flex items-end gap-2">
             <textarea
@@ -320,7 +284,7 @@ export function ThoughtsPanel() {
               value={input}
               onChange={handleInput}
               onKeyDown={handleKeyDown}
-              placeholder="Message Thoughts…"
+              placeholder="Ask about your day, tasks, habits…"
               rows={1}
               disabled={loading}
               autoComplete="off"
@@ -328,12 +292,9 @@ export function ThoughtsPanel() {
               spellCheck={false}
               className={cn(
                 "flex-1 resize-none rounded-2xl bg-muted border border-border",
-                "px-3.5 py-2.5 text-sm leading-relaxed",
-                "placeholder:text-muted-foreground/60",
+                "px-3.5 py-2.5 text-sm leading-relaxed placeholder:text-muted-foreground/60",
                 "focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent",
-                "transition-all min-h-[40px] max-h-[120px]",
-                "scrollbar-hide overflow-y-auto",
-                "disabled:opacity-50"
+                "transition-all min-h-[40px] max-h-[120px] scrollbar-hide overflow-y-auto disabled:opacity-50"
               )}
               style={{ height: "40px" }}
             />
@@ -341,16 +302,12 @@ export function ThoughtsPanel() {
               onClick={() => handleSend()}
               disabled={loading || !input.trim()}
               className={cn(
-                "w-10 h-10 rounded-2xl flex items-center justify-center shrink-0",
-                "bg-primary text-primary-foreground",
+                "w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 bg-primary text-primary-foreground",
                 "transition-all hover:opacity-90 active:scale-95",
                 "disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
               )}
             >
-              {loading
-                ? <Loader2 className="w-4 h-4 animate-spin" />
-                : <Send className="w-4 h-4" />
-              }
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
             </button>
           </div>
         </div>

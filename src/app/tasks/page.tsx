@@ -6,7 +6,7 @@ import {
   Trash2, Edit2, Flame, Calendar, Brain, Filter,
 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
-import { Task, Priority } from "@/types";
+import { Task, Priority, Recurrence } from "@/types";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,17 +28,26 @@ const PRIORITY_STYLES: Record<Priority, { dot: string; badge: string }> = {
   critical: { dot: "bg-red-400",    badge: "bg-red-500/10 text-red-400 border-red-500/20"         },
 };
 
+const RECURRENCE_OPTIONS: { value: Recurrence; label: string }[] = [
+  { value: "none",     label: "Does not repeat"  },
+  { value: "daily",    label: "Every day"         },
+  { value: "weekdays", label: "Weekdays (Mon–Fri)" },
+  { value: "weekly",   label: "Every week"        },
+  { value: "monthly",  label: "Every month"       },
+];
+
 interface TaskFormData {
   title: string; description: string; priority: Priority;
-  dueDate: string; dueTime: string; category: string; reminder: boolean;
+  dueDate: string; dueTime: string; category: string;
+  reminder: boolean; recurrence: Recurrence;
 }
 const DEFAULT_FORM: TaskFormData = {
   title: "", description: "", priority: "medium",
-  dueDate: "", dueTime: "", category: "", reminder: false,
+  dueDate: "", dueTime: "", category: "", reminder: false, recurrence: "none",
 };
 
 export default function TasksPage() {
-  const { tasks, addTask, updateTask, deleteTask, toggleThoughtsPanel } = useAppStore();
+  const { tasks, addTask, updateTask, deleteTask, completeTask, toggleThoughtsPanel, notificationsEnabled, setNotificationsEnabled } = useAppStore();
   const [search,         setSearch]         = useState("");
   const [filterPriority, setFilterPriority] = useState<Priority | "all">("all");
   const [dialogOpen,     setDialogOpen]     = useState(false);
@@ -64,8 +73,30 @@ export default function TasksPage() {
       title: task.title, description: task.description ?? "", priority: task.priority,
       dueDate: task.dueDate ?? "", dueTime: task.dueTime ?? "",
       category: task.category ?? "", reminder: task.reminder ?? false,
+      recurrence: task.recurrence ?? "none",
     });
     setDialogOpen(true);
+  }
+
+  function scheduleNotification(title: string, dueDate: string, dueTime: string) {
+    if (!("Notification" in window)) return;
+    if (Notification.permission !== "granted") {
+      Notification.requestPermission().then((p) => {
+        if (p === "granted") setNotificationsEnabled(true);
+      });
+      return;
+    }
+    const dt = new Date(`${dueDate}T${dueTime}`);
+    const delay = dt.getTime() - Date.now();
+    if (delay > 0 && delay < 7 * 24 * 60 * 60 * 1000) { // within 7 days
+      setTimeout(() => {
+        new Notification(`⏰ Reminder: ${title}`, {
+          body: `This task is due now!`,
+          icon: "/icon",
+          badge: "/icon",
+        });
+      }, delay);
+    }
   }
 
   function handleSave() {
@@ -74,14 +105,20 @@ export default function TasksPage() {
       title: form.title, description: form.description, priority: form.priority,
       dueDate: form.dueDate || undefined, dueTime: form.dueTime || undefined,
       category: form.category || undefined, reminder: form.reminder,
+      recurrence: form.recurrence !== "none" ? form.recurrence : undefined,
     };
     if (editId) updateTask(editId, payload);
     else addTask({ ...payload, status: "todo" });
+    // Schedule a local notification if reminder + time set
+    if (form.reminder && form.dueDate && form.dueTime) {
+      scheduleNotification(form.title, form.dueDate, form.dueTime);
+    }
     setDialogOpen(false);
   }
 
   function toggleDone(task: Task) {
-    updateTask(task.id, { status: task.status === "done" ? "todo" : "done" });
+    if (task.status === "done") updateTask(task.id, { status: "todo" });
+    else completeTask(task.id); // handles recurring spawn
   }
 
   const stats = {
@@ -215,6 +252,26 @@ export default function TasksPage() {
                 </div>
               </div>
             </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Repeat</label>
+                <Select value={form.recurrence} onValueChange={(v) => setForm({ ...form, recurrence: v as Recurrence })}>
+                  <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {RECURRENCE_OPTIONS.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer text-sm">
+                <input
+                  type="checkbox"
+                  checked={form.reminder}
+                  onChange={(e) => setForm({ ...form, reminder: e.target.checked })}
+                  className="rounded"
+                />
+                Set reminder notification
+              </label>
             <DialogFooter className="gap-2">
               <Button variant="outline" className="rounded-xl" onClick={() => setDialogOpen(false)}>Cancel</Button>
               <Button className="rounded-xl" onClick={handleSave} disabled={!form.title.trim()}>
@@ -256,6 +313,9 @@ function TaskRow({ task, onToggle, onEdit, onDelete }: {
           )}
           {task.category && (
             <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded-md">{task.category}</span>
+          )}
+          {task.recurrence && task.recurrence !== "none" && (
+            <span className="text-[10px] text-blue-400 bg-blue-500/10 border border-blue-500/20 px-1.5 py-0.5 rounded-md capitalize">↺ {task.recurrence}</span>
           )}
         </div>
       </div>

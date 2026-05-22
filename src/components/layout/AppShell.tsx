@@ -3,11 +3,12 @@
 import { useSession } from "next-auth/react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { Sidebar } from "./Sidebar";
-import { ThoughtsPanel } from "./ThoughtsPanel";
-import { MainContentInner } from "./MainContentInner";
-import { BottomNav } from "./BottomNav";
-import { useAppStore } from "@/store/useAppStore";
+import { Sidebar }              from "./Sidebar";
+import { ThoughtsPanel }        from "./ThoughtsPanel";
+import { MainContentInner }     from "./MainContentInner";
+import { BottomNav }            from "./BottomNav";
+import { Onboarding }           from "@/components/ui/onboarding";
+import { useAppStore }          from "@/store/useAppStore";
 
 const PUBLIC_PATHS = ["/auth"];
 
@@ -15,18 +16,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { data: session, status } = useSession();
   const pathname = usePathname();
   const router   = useRouter();
-  const { updateProfile } = useAppStore();
+  const { updateProfile, notificationsEnabled, setNotificationsEnabled } = useAppStore();
 
   const isPublic = PUBLIC_PATHS.includes(pathname);
 
-  // Sync the authenticated user's name into the local store
+  // Sync authenticated user name into store
   useEffect(() => {
-    if (session?.user?.name) {
-      updateProfile({ name: session.user.name });
-    }
+    if (session?.user?.name) updateProfile({ name: session.user.name });
   }, [session, updateProfile]);
 
-  // Guard: if not authenticated and not on a public page, redirect
+  // Redirect unauthenticated users
   useEffect(() => {
     if (status === "loading") return;
     if (!session && !isPublic) {
@@ -34,7 +33,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     }
   }, [session, status, isPublic, pathname, router]);
 
-  // Show nothing while the session is being resolved
+  // Request notification permission if user hasn't granted it yet
+  useEffect(() => {
+    if (!("Notification" in window)) return;
+    if (notificationsEnabled) return;
+    if (Notification.permission === "granted") {
+      setNotificationsEnabled(true);
+      return;
+    }
+    // We don't auto-prompt — user can enable from settings or when adding a task
+    // Just track the current state
+    if (Notification.permission === "denied") return;
+  }, [notificationsEnabled, setNotificationsEnabled]);
+
   if (status === "loading" && !isPublic) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -43,14 +54,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // Public routes (auth page) — clean layout, no sidebar
-  if (isPublic) {
-    return <>{children}</>;
-  }
+  if (isPublic) return <>{children}</>;
 
   return (
     <div className="flex h-screen overflow-hidden">
-      {/* Sidebar — tablet/desktop only */}
       <div className="hidden md:block">
         <Sidebar />
       </div>
@@ -60,8 +67,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </MainContentInner>
 
       <ThoughtsPanel />
-      {/* Bottom nav — mobile only */}
       <BottomNav />
+      <Onboarding />
     </div>
   );
 }

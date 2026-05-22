@@ -7,7 +7,7 @@ import { signOut, useSession } from "next-auth/react";
 import {
   Home, CheckSquare, BookOpen, Zap, Calendar, User,
   Settings, Download, Brain, ChevronLeft, ChevronRight,
-  Sun, Moon, BarChart2, LogOut, Shield,
+  Sun, Moon, BarChart2, LogOut, Shield, Flame,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/useAppStore";
@@ -20,6 +20,7 @@ const NAV = {
     { href: "/journal",   icon: BookOpen,    label: "Journal"   },
     { href: "/skills",    icon: Zap,         label: "Skills"    },
     { href: "/calendar",  icon: Calendar,    label: "Calendar"  },
+    { href: "/habits",    icon: Flame,       label: "Habits"    },
     { href: "/analytics", icon: BarChart2,   label: "Analytics" },
   ],
   Personal: [

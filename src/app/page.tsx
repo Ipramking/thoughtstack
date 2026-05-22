@@ -5,7 +5,7 @@ import Link from "next/link";
 import {
   CheckSquare, BookOpen, Zap, Calendar, BarChart2,
   Brain, TrendingUp, Clock, Flame, ArrowRight, Plus,
-  Sparkles,
+  Sparkles, CheckCircle2, Circle,
 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,7 +25,7 @@ const PRIORITY_DOT: Record<string, string> = {
 };
 
 export default function HomePage() {
-  const { tasks, journals, skills, events, profile, toggleThoughtsPanel } = useAppStore();
+  const { tasks, journals, skills, events, profile, toggleThoughtsPanel, habits, isHabitDone, toggleHabitLog, getHabitStreak } = useAppStore();
 
   const todayTasks = useMemo(
     () => tasks.filter((t) => t.dueDate && isToday(t.dueDate) && t.status !== "done"),
@@ -250,6 +250,54 @@ export default function HomePage() {
                 )}
               </CardContent>
             </Card>
+
+            {/* Habits today */}
+            {habits.length > 0 && (() => {
+              const todayStr = new Date().toISOString().split("T")[0];
+              return (
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between pb-3 pt-5 px-5">
+                    <CardTitle className="text-base font-semibold flex items-center gap-2">
+                      <Flame className="w-4 h-4 text-orange-400" />
+                      Habits
+                    </CardTitle>
+                    <Link href="/habits">
+                      <Button variant="ghost" size="sm" className="gap-1 text-xs h-8 rounded-lg">
+                        All <ArrowRight className="w-3 h-3" />
+                      </Button>
+                    </Link>
+                  </CardHeader>
+                  <CardContent className="px-5 pb-5 pt-0 space-y-2">
+                    {habits.slice(0, 4).map((h) => {
+                      const done   = isHabitDone(h.id, todayStr);
+                      const streak = getHabitStreak(h.id);
+                      return (
+                        <button
+                          key={h.id}
+                          onClick={() => toggleHabitLog(h.id, todayStr)}
+                          className={cn(
+                            "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-left",
+                            done ? "bg-green-500/10" : "hover:bg-muted/60"
+                          )}
+                        >
+                          {done
+                            ? <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
+                            : <Circle       className="w-4 h-4 text-muted-foreground shrink-0" />
+                          }
+                          <span className="text-lg leading-none shrink-0">{h.emoji}</span>
+                          <span className={cn("text-sm font-medium flex-1 truncate", done && "line-through text-muted-foreground")}>
+                            {h.name}
+                          </span>
+                          {streak > 0 && (
+                            <span className="text-[10px] font-bold text-orange-400 shrink-0">🔥{streak}</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </CardContent>
+                </Card>
+              );
+            })()}
 
             {/* Journal */}
             <Card>

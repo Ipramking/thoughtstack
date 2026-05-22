@@ -8,6 +8,7 @@ import {
 import {
   format, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
   eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths,
+  addWeeks, subWeeks, startOfWeek as startOfWeekFn,
   isToday as dateFnsIsToday,
 } from "date-fns";
 import { useAppStore } from "@/store/useAppStore";
@@ -61,7 +62,8 @@ export default function CalendarPage() {
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState<EventForm>(DEFAULT_FORM);
-  const [view, setView] = useState<"month" | "agenda">("month");
+  const [view,        setView]        = useState<"month" | "week" | "agenda">("month");
+  const [weekStart,   setWeekStart]   = useState(() => startOfWeekFn(new Date(), { weekStartsOn: 1 }));
 
   const calDays = useMemo(() => {
     const start = startOfWeek(startOfMonth(currentMonth));
@@ -136,7 +138,8 @@ export default function CalendarPage() {
 
       <Tabs value={view} onValueChange={(v) => setView(v as "month" | "agenda")}>
         <TabsList>
-          <TabsTrigger value="month">Month view</TabsTrigger>
+          <TabsTrigger value="month">Month</TabsTrigger>
+          <TabsTrigger value="week">Week</TabsTrigger>
           <TabsTrigger value="agenda">Agenda</TabsTrigger>
         </TabsList>
 
@@ -276,6 +279,83 @@ export default function CalendarPage() {
               </Card>
             </div>
           </div>
+        </TabsContent>
+
+        {/* ── Week view ── */}
+        <TabsContent value="week" className="mt-4">
+          {(() => {
+            const weekDays = eachDayOfInterval({ start: weekStart, end: addWeeks(weekStart, 1) }).slice(0, 7);
+            const HOURS = Array.from({ length: 15 }, (_, i) => i + 7); // 7am–9pm
+            return (
+              <div className="space-y-3">
+                {/* Nav */}
+                <div className="flex items-center justify-between">
+                  <button onClick={() => setWeekStart((w) => subWeeks(w, 1))}
+                    className="p-2 rounded-lg hover:bg-muted transition-colors">
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <p className="text-sm font-semibold">
+                    {format(weekStart, "MMM d")} – {format(addWeeks(weekStart, 1), "MMM d, yyyy")}
+                  </p>
+                  <button onClick={() => setWeekStart((w) => addWeeks(w, 1))}
+                    className="p-2 rounded-lg hover:bg-muted transition-colors">
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="overflow-x-auto rounded-xl border border-border">
+                  <div className="min-w-[480px]">
+                    {/* Day headers */}
+                    <div className="grid border-b border-border bg-muted/30" style={{ gridTemplateColumns: "48px repeat(7, 1fr)" }}>
+                      <div className="py-2" />
+                      {weekDays.map((d) => (
+                        <div key={d.toISOString()} className={cn(
+                          "py-2 text-center text-[10px] font-semibold border-l border-border",
+                          dateFnsIsToday(d) && "text-primary"
+                        )}>
+                          <p className="text-muted-foreground">{format(d, "EEE")}</p>
+                          <p className={cn("text-sm font-bold mt-0.5", dateFnsIsToday(d) && "w-6 h-6 bg-primary text-primary-foreground rounded-full flex items-center justify-center mx-auto text-xs")}>
+                            {format(d, "d")}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Time slots */}
+                    {HOURS.map((hour) => (
+                      <div key={hour} className="grid border-b border-border/50" style={{ gridTemplateColumns: "48px repeat(7, 1fr)" }}>
+                        <div className="py-2 px-1.5 text-[10px] text-muted-foreground text-right leading-none pt-1">
+                          {hour === 12 ? "12pm" : hour > 12 ? `${hour - 12}pm` : `${hour}am`}
+                        </div>
+                        {weekDays.map((d) => {
+                          const key = format(d, "yyyy-MM-dd");
+                          const slotEvents = events.filter((e) => {
+                            if (e.date !== key) return false;
+                            if (!e.startTime) return false;
+                            return parseInt(e.startTime.split(":")[0]) === hour;
+                          });
+                          return (
+                            <div key={d.toISOString()} className="border-l border-border/50 min-h-[40px] p-0.5 relative hover:bg-muted/20 transition-colors cursor-pointer"
+                              onDoubleClick={() => { openCreate(d); }}>
+                              {slotEvents.map((ev) => (
+                                <div key={ev.id} className={cn(
+                                  "text-[10px] font-medium px-1.5 py-1 rounded-md truncate mb-0.5 border",
+                                  EVENT_COLORS[ev.type]
+                                )}>
+                                  {ev.startTime} {ev.title}
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <p className="text-[10px] text-muted-foreground text-center">Double-tap any slot to add an event</p>
+              </div>
+            );
+          })()}
         </TabsContent>
 
         <TabsContent value="agenda" className="mt-4 space-y-3">

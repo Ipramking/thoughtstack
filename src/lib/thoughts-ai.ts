@@ -1,4 +1,4 @@
-import { ThoughtsAction } from "@/types";
+import { ThoughtsAction, ThoughtsContext } from "@/types";
 
 export interface ThoughtsResponse {
   reply: string;
@@ -6,19 +6,19 @@ export interface ThoughtsResponse {
   provider?: "claude" | "gemini" | "local";
 }
 
-// ─── Rule-based fallback engine ───────────────────────────────────────────────
+// ─── Rule-based fallback ──────────────────────────────────────────────────────
 
-const PRIORITY_KEYWORDS = {
+const PRIORITY_KW = {
   critical: ["urgent", "asap", "critical", "emergency", "immediately", "deadline today"],
-  high: ["important", "high priority", "must", "need to", "have to", "required"],
-  medium: ["should", "plan to", "want to", "upcoming"],
-  low: ["maybe", "someday", "eventually", "optional", "would like"],
+  high:     ["important", "high priority", "must", "need to", "have to", "required"],
+  medium:   ["should", "plan to", "want to", "upcoming"],
+  low:      ["maybe", "someday", "eventually", "optional", "would like"],
 };
 
 const TIME_PATTERNS = [
-  { pattern: /\btomorrow\b/i, offset: 1 },
-  { pattern: /\btoday\b/i, offset: 0 },
-  { pattern: /\bnext week\b/i, offset: 7 },
+  { pattern: /\btomorrow\b/i,      offset: 1 },
+  { pattern: /\btoday\b/i,         offset: 0 },
+  { pattern: /\bnext week\b/i,     offset: 7 },
   { pattern: /\bin (\d+) days?\b/i, group: 1 },
 ];
 
@@ -26,10 +26,8 @@ const HOUR_PATTERN = /\bat?\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b/i;
 
 function detectPriority(text: string): "low" | "medium" | "high" | "critical" {
   const lower = text.toLowerCase();
-  for (const [level, keywords] of Object.entries(PRIORITY_KEYWORDS)) {
-    if (keywords.some((kw) => lower.includes(kw))) {
-      return level as "low" | "medium" | "high" | "critical";
-    }
+  for (const [level, kws] of Object.entries(PRIORITY_KW)) {
+    if (kws.some((k) => lower.includes(k))) return level as "low" | "medium" | "high" | "critical";
   }
   return "medium";
 }
@@ -39,99 +37,113 @@ function detectDate(text: string): string | undefined {
     const match = text.match(tp.pattern);
     if (match) {
       const d = new Date();
-      if ("offset" in tp) {
-        d.setDate(d.getDate() + (tp.offset ?? 0));
-      } else if ("group" in tp && tp.group) {
-        d.setDate(d.getDate() + parseInt(match[tp.group]));
-      }
+      if ("offset" in tp) d.setDate(d.getDate() + (tp.offset ?? 0));
+      else if ("group" in tp && tp.group) d.setDate(d.getDate() + parseInt(match[tp.group!]));
       return d.toISOString().split("T")[0];
     }
   }
-  return undefined;
 }
 
 function detectTime(text: string): string | undefined {
-  const match = text.match(HOUR_PATTERN);
-  if (!match) return undefined;
-  let hour = parseInt(match[1]);
-  const minute = match[2] ? parseInt(match[2]) : 0;
-  const meridiem = match[3]?.toLowerCase();
-  if (meridiem === "pm" && hour < 12) hour += 12;
-  if (meridiem === "am" && hour === 12) hour = 0;
-  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+  const m = text.match(HOUR_PATTERN);
+  if (!m) return undefined;
+  let h = parseInt(m[1]);
+  const min = m[2] ? parseInt(m[2]) : 0;
+  const mer = m[3]?.toLowerCase();
+  if (mer === "pm" && h < 12) h += 12;
+  if (mer === "am" && h === 12) h = 0;
+  return `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
 }
 
 function detectTasks(text: string): string[] {
-  const taskIndicators = [
+  const pats = [
     /(?:need to|have to|must|should|want to|going to|plan to)\s+(.+?)(?:\.|,|and|$)/gi,
     /(?:finish|complete|do|write|build|create|fix|review|update)\s+(.+?)(?:\.|,|and|$)/gi,
   ];
   const tasks: string[] = [];
-  for (const pattern of taskIndicators) {
+  for (const p of pats) {
     let m: RegExpExecArray | null;
-    while ((m = pattern.exec(text)) !== null) {
-      const task = m[1].trim();
-      if (task.length > 3 && task.length < 100) tasks.push(task);
+    while ((m = p.exec(text)) !== null) {
+      const t = m[1].trim();
+      if (t.length > 3 && t.length < 100) tasks.push(t);
     }
   }
-  return Array.from(new Set(tasks));
+  return [...new Set(tasks)];
 }
 
-function ruleBased(userText: string): ThoughtsResponse {
-  const lower = userText.toLowerCase();
+function ruleBased(text: string, context?: ThoughtsContext): ThoughtsResponse {
+  const lower = text.toLowerCase();
   const actions: ThoughtsAction[] = [];
 
-  const isGreeting = /^(hi|hello|hey|sup|what'?s up)\b/i.test(lower);
-  if (isGreeting) {
+  // Greetings
+  if (/^(hi|hello|hey|sup)\b/i.test(lower)) {
+    const name = ""; // could be passed from context if needed
     return {
-      reply:
-        "Hey! I'm Thoughts, your AI assistant. I can help you manage tasks, journal insights, schedule events, or give productivity advice. What's on your mind?",
-      actions: [],
-      provider: "local",
+      reply: `Hey${name ? " " + name : ""}! I'm Thoughts, your AI assistant. Ask me about your tasks, habits, schedule, or anything on your mind.`,
+      actions: [], provider: "local",
     };
   }
 
-  const isAskingAboutMe = /what (can|do) you do|who are you|help me/i.test(lower);
-  if (isAskingAboutMe) {
-    return {
-      reply:
-        "I'm Thoughts — your personal AI inside ThoughtStack. I can:\n\n• Create and prioritize tasks from what you tell me\n• Schedule events and detect times automatically\n• Analyze your journal entries for patterns\n• Suggest study sessions and skill missions\n• Give you productivity insights\n\nJust tell me what's going on — naturally, like you'd tell a friend.",
-      actions: [],
-      provider: "local",
-    };
+  // Context-aware answers using local rule engine
+  if (context) {
+    // "What should I focus on today?" / "what do I have today?"
+    if (/focus|today|priority|important/i.test(lower)) {
+      const pending = context.todayTasks.filter((t) => t.status !== "done");
+      if (pending.length > 0) {
+        const top = pending.slice(0, 3).map((t) => `• ${t.title} (${t.priority})`).join("\n");
+        return {
+          reply: `Here's what needs your attention today:\n${top}\n\nI'd start with the highest priority items first. Want me to help you plan your time?`,
+          actions: [], provider: "local",
+        };
+      }
+      if (context.todayEvents.length > 0) {
+        const ev = context.todayEvents.map((e) => `• ${e.title}${e.startTime ? ` at ${e.startTime}` : ""}`).join("\n");
+        return { reply: `No tasks due today, but you have:\n${ev}\n\nLooks like a lighter day — good time to work on your skills or journal!`, actions: [], provider: "local" };
+      }
+      return { reply: "Your slate is clear today! Great time to get ahead — want me to help you plan something?", actions: [], provider: "local" };
+    }
+
+    // Habit check
+    if (/habit/i.test(lower)) {
+      const undone = context.habits.filter((h) => !h.doneToday);
+      if (undone.length > 0) {
+        return { reply: `You have ${undone.length} habit${undone.length > 1 ? "s" : ""} left for today: ${undone.map((h) => h.name).join(", ")}. Keep the streak going!`, actions: [], provider: "local" };
+      }
+      return { reply: "All habits done for today! 🎉 Great consistency.", actions: [], provider: "local" };
+    }
+
+    // Stats / how am I doing
+    if (/how am i|progress|stats|doing/i.test(lower)) {
+      const { tasksTotal, tasksDone, skillCount } = context.stats;
+      const rate = tasksTotal ? Math.round((tasksDone / tasksTotal) * 100) : 0;
+      const recentMood = context.recentJournals[0]?.mood;
+      return {
+        reply: `Here's your snapshot:\n• Task completion: ${tasksDone}/${tasksTotal} (${rate}%)\n• Skills tracked: ${skillCount}\n• Recent mood: ${recentMood ?? "no data"}\n\nYou're doing ${rate > 60 ? "well" : "okay"} — ${rate > 60 ? "keep it up!" : "let's push a bit harder today."}`,
+        actions: [], provider: "local",
+      };
+    }
   }
 
-  const detectedTasks = detectTasks(userText);
-  const date = detectDate(userText);
-  const time = detectTime(userText);
-  const priority = detectPriority(userText);
+  // Task detection
+  const detectedTasks = detectTasks(text);
+  const date = detectDate(text);
+  const time = detectTime(text);
+  const priority = detectPriority(text);
 
-  for (const taskTitle of detectedTasks.slice(0, 3)) {
+  for (const title of detectedTasks.slice(0, 3)) {
     actions.push({
       type: "create_task",
-      label: `Create task: "${taskTitle}"`,
-      data: {
-        title: taskTitle.charAt(0).toUpperCase() + taskTitle.slice(1),
-        priority,
-        dueDate: date,
-        dueTime: time,
-      },
+      label: `Create task: "${title}"`,
+      data: { title: title.charAt(0).toUpperCase() + title.slice(1), priority, dueDate: date, dueTime: time },
     });
   }
 
-  const meetingMatch = userText.match(
-    /(?:meeting|call|session|event|appointment)\s+(?:about\s+)?(.+?)(?:\s+at|\s+on|\s+by|$)/i
-  );
+  const meetingMatch = text.match(/(?:meeting|call|session|event|appointment)\s+(?:about\s+)?(.+?)(?:\s+at|\s+on|\s+by|$)/i);
   if (meetingMatch && (date || time)) {
     actions.push({
       type: "create_event",
       label: `Add to calendar: "${meetingMatch[1].trim()}"`,
-      data: {
-        title: meetingMatch[1].trim(),
-        date: date ?? new Date().toISOString().split("T")[0],
-        startTime: time,
-        type: "meeting",
-      },
+      data: { title: meetingMatch[1].trim(), date: date ?? new Date().toISOString().split("T")[0], startTime: time, type: "meeting" },
     });
   }
 
@@ -139,31 +151,20 @@ function ruleBased(userText: string): ThoughtsResponse {
   const hasStress = stressWords.some((w) => lower.includes(w));
 
   let reply = "";
-
-  if (actions.length > 0 && detectedTasks.length > 0) {
-    reply = `I caught ${detectedTasks.length} thing${detectedTasks.length > 1 ? "s" : ""} you need to handle`;
-    if (date) reply += ` — looks like ${date === new Date().toISOString().split("T")[0] ? "today" : "upcoming"}`;
-    if (time) reply += ` at ${time}`;
-    reply += `. I've prepared ${actions.length} action${actions.length > 1 ? "s" : ""} for you below.`;
-    if (priority === "high" || priority === "critical")
-      reply += " These look high priority — I'd tackle them first.";
+  if (actions.length > 0) {
+    reply = `I spotted ${actions.length} action${actions.length > 1 ? "s" : ""} from what you said`;
+    if (date) reply += ` — targeting ${date === new Date().toISOString().split("T")[0] ? "today" : "an upcoming date"}`;
+    reply += `. I've prepared them below — tap to apply.`;
+    if (priority === "high" || priority === "critical") reply += " These look high priority.";
   } else if (hasStress) {
-    reply =
-      "I'm picking up some stress in what you wrote. Remember: break big problems into small steps. Can I help you turn any of this into clear tasks so it feels less overwhelming?";
-    actions.push({
-      type: "journal_insight",
-      label: "Log this as a journal entry",
-      data: { content: userText, mood: "bad" },
-    });
-  } else if (lower.includes("schedule") || lower.includes("plan")) {
-    reply =
-      "Want me to help you build a schedule? Tell me what you need to get done and by when — I'll create time blocks for you.";
-  } else if (lower.includes("learn") || lower.includes("study") || lower.includes("skill")) {
-    reply =
-      "Great mindset! Head to the Skills section and I'll generate a personalized mission and class plan for any skill you want to track. What are you trying to learn?";
+    reply = "I'm picking up some stress. Break it into small steps — can I turn anything you said into a task to make it feel more manageable?";
+    actions.push({ type: "journal_insight", label: "Log this as a journal entry", data: { content: text, mood: "bad" } });
+  } else if (/schedule|plan/i.test(lower)) {
+    reply = "Want me to help you build a plan? Tell me what needs to get done and by when.";
+  } else if (/learn|study|skill/i.test(lower)) {
+    reply = "Great mindset! Head to Skills and I'll generate a mission plan for any skill you want to track. What are you learning?";
   } else {
-    reply =
-      "Got it. Tell me more — are there any tasks, deadlines, or events I should help you track? I work best when you describe what you're working on naturally.";
+    reply = "Got it. Are there tasks, deadlines, or events I should help you track? Describe what you're working on naturally.";
   }
 
   return { reply, actions, provider: "local" };
@@ -173,29 +174,24 @@ function ruleBased(userText: string): ThoughtsResponse {
 
 export async function callThoughts(
   userMessage: string,
-  history: Array<{ role: "user" | "assistant"; content: string }>
+  history: Array<{ role: "user" | "assistant"; content: string }>,
+  context?: ThoughtsContext,
 ): Promise<ThoughtsResponse> {
   try {
     const res = await fetch("/api/thoughts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: userMessage, history }),
+      body: JSON.stringify({ message: userMessage, history, context }),
     });
 
-    // API reached but all cloud providers failed → use local engine
     if (res.status === 503) {
       const body = await res.json().catch(() => ({}));
-      if (body?.error === "all_providers_failed") {
-        return ruleBased(userMessage);
-      }
+      if (body?.error === "all_providers_failed") return ruleBased(userMessage, context);
     }
 
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-    const data = await res.json();
-    return data as ThoughtsResponse;
+    return await res.json() as ThoughtsResponse;
   } catch {
-    // Network error or server down → use local engine
-    return ruleBased(userMessage);
+    return ruleBased(userMessage, context);
   }
 }

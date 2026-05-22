@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { cn, formatDate } from "@/lib/utils";
+import { MarkdownToolbar, renderMarkdown } from "@/components/ui/markdown-toolbar";
 import { toast } from "@/hooks/useToast";
 
 const MOODS: { value: Mood; emoji: string; label: string }[] = [
@@ -43,8 +44,9 @@ export default function JournalPage() {
   const [editId,         setEditId]         = useState<string | null>(null);
   const [form,           setForm]           = useState<FormData>(DEFAULT_FORM);
   const [recording,      setRecording]      = useState(false);
-  const mediaRef  = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<BlobPart[]>([]);
+  const mediaRef    = useRef<MediaRecorder | null>(null);
+  const chunksRef   = useRef<BlobPart[]>([]);
+  const contentRef  = useRef<HTMLTextAreaElement>(null);
 
   const folders = useMemo(
     () => Array.from(new Set(journals.map((j) => j.folder).filter((f): f is string => Boolean(f)))),
@@ -209,15 +211,27 @@ export default function JournalPage() {
                 </div>
               </div>
 
-              <div className="relative">
-                <Textarea placeholder="Write your thoughts…" value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })}
-                  className="resize-none h-32 pr-12 rounded-xl" />
-                <button onClick={toggleRecording}
-                  className={cn("absolute right-3 top-3 p-1.5 rounded-lg transition-all touch-target",
-                    recording ? "bg-red-500 text-white animate-pulse" : "text-muted-foreground hover:bg-muted")}
-                >
-                  {recording ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-                </button>
+              <div className="rounded-xl border border-border overflow-hidden focus-within:ring-2 focus-within:ring-ring">
+                <MarkdownToolbar
+                  textareaRef={contentRef}
+                  value={form.content}
+                  onChange={(v) => setForm({ ...form, content: v })}
+                />
+                <div className="relative">
+                  <Textarea
+                    ref={contentRef}
+                    placeholder="Write your thoughts… (supports **bold**, *italic*, ## headings, - bullets)"
+                    value={form.content}
+                    onChange={(e) => setForm({ ...form, content: e.target.value })}
+                    className="resize-none h-36 pr-12 rounded-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+                  />
+                  <button onClick={toggleRecording}
+                    className={cn("absolute right-3 top-3 p-1.5 rounded-lg transition-all touch-target",
+                      recording ? "bg-red-500 text-white animate-pulse" : "text-muted-foreground hover:bg-muted")}
+                  >
+                    {recording ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -267,7 +281,10 @@ function JournalCard({ entry, onEdit, onDelete }: { entry: JournalEntry; onEdit:
             <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg text-destructive hover:text-destructive" onClick={onDelete}><Trash2 className="w-3 h-3" /></Button>
           </div>
         </div>
-        <p className="text-xs text-muted-foreground line-clamp-3 leading-relaxed mb-3">{entry.content}</p>
+        <p
+          className="text-xs text-muted-foreground line-clamp-3 leading-relaxed mb-3"
+          dangerouslySetInnerHTML={{ __html: renderMarkdown(entry.content) }}
+        />
         {entry.tags.length > 0 && (
           <div className="flex items-center gap-1.5 flex-wrap">
             {entry.tags.slice(0, 3).map((tag) => (
