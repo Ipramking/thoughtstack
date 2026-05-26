@@ -1,5 +1,5 @@
 // ThoughtStack Service Worker
-const VERSION   = "thoughtstack-v5";
+const VERSION   = "thoughtstack-v6";
 const CACHE     = VERSION;
 const PRECACHE  = ["/", "/tasks", "/journal", "/calendar", "/offline"];
 

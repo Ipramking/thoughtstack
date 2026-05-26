@@ -7,23 +7,21 @@ export function ServiceWorkerRegister() {
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
 
+    // Capture BEFORE registration — true means a SW is already controlling
+    // this page, so any future controllerchange is a real update, not first install.
+    const hadController = !!navigator.serviceWorker.controller;
     let refreshing = false;
 
-    // When the active SW changes (new version took control), reload once
     navigator.serviceWorker.addEventListener("controllerchange", () => {
+      // First install: no previous controller → SW just claimed the page for
+      // the first time. Do NOT reload — there's nothing to update.
+      if (!hadController) return;
+
+      // Genuine update: previous SW was replaced by new one.
+      // Reload exactly once.
       if (refreshing) return;
       refreshing = true;
       window.location.reload();
-    });
-
-    // Listen for the SW_UPDATED message sent from sw.js activate
-    navigator.serviceWorker.addEventListener("message", (event) => {
-      if (event.data?.type === "SW_UPDATED") {
-        // The SW already called skipWaiting + claimed clients.
-        // controllerchange will fire and trigger the reload above.
-        // This message is just for logging/telemetry.
-        console.info("[SW] Updated to", event.data.version);
-      }
     });
 
     navigator.serviceWorker
@@ -37,11 +35,12 @@ export function ServiceWorkerRegister() {
           if (!newWorker) return;
 
           newWorker.addEventListener("statechange", () => {
-            // New SW installed and waiting — it will activate via skipWaiting
-            // which triggers controllerchange → reload handled above
-            if (newWorker.state === "installed" && navigator.serviceWorker.controller) {
-              // There IS a previous SW → this is a real update
-              toast.info("App updated — refreshing…");
+            if (
+              newWorker.state === "installed" &&
+              navigator.serviceWorker.controller
+            ) {
+              // New version ready — toast only, reload handled by controllerchange
+              toast.info("App updated — reloading…");
             }
           });
         });
