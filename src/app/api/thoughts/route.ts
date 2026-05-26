@@ -59,15 +59,8 @@ function buildSystemPrompt(context?: ThoughtsContext): string {
     parts.push(`Recent journal entries:\n${jLines}`);
   }
 
-  if (context.habits.length > 0) {
-    const hLines = context.habits
-      .map((h) => `  • ${h.name}: ${h.doneToday ? "✓ done today" : "not done"}, ${h.streak} day streak`)
-      .join("\n");
-    parts.push(`Habits:\n${hLines}`);
-  }
-
   parts.push(
-    `Stats: ${context.stats.tasksDone}/${context.stats.tasksTotal} tasks done, ${context.stats.skillCount} skills tracked`
+    `Stats: ${context.stats.tasksDone}/${context.stats.tasksTotal} tasks done, ${context.stats.journalCount} journal entries`
   );
 
   return parts.join("\n");

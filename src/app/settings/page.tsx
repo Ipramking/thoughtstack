@@ -33,19 +33,17 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
-  const { tasks, journals, skills, events } = useAppStore();
+  const { tasks, journals, events } = useAppStore();
 
-  function clearData(type: "tasks" | "journals" | "skills" | "events" | "all") {
+  function clearData(type: "tasks" | "journals" | "events" | "all") {
     if (!confirm(`Clear ${type === "all" ? "ALL data" : type}? This cannot be undone.`)) return;
     const s = useAppStore.getState();
     if (type === "tasks")    [...s.tasks].forEach((t) => s.deleteTask(t.id));
     if (type === "journals") [...s.journals].forEach((j) => s.deleteJournal(j.id));
-    if (type === "skills")   [...s.skills].forEach((sk) => s.deleteSkill(sk.id));
     if (type === "events")   [...s.events].forEach((e) => s.deleteEvent(e.id));
     if (type === "all") {
       [...s.tasks].forEach((t) => s.deleteTask(t.id));
       [...s.journals].forEach((j) => s.deleteJournal(j.id));
-      [...s.skills].forEach((sk) => s.deleteSkill(sk.id));
       [...s.events].forEach((e) => s.deleteEvent(e.id));
       s.clearMessages();
     }
@@ -146,7 +144,6 @@ export default function SettingsPage() {
               {[
                 { type: "tasks"    as const, label: "Tasks",           count: tasks.length    },
                 { type: "journals" as const, label: "Journal entries", count: journals.length  },
-                { type: "skills"   as const, label: "Skills",          count: skills.length    },
                 { type: "events"   as const, label: "Calendar events", count: events.length    },
               ].map(({ type, label, count }) => (
                 <SettingRow key={type} label={label} description={`${count} ${count === 1 ? "item" : "items"} stored`}

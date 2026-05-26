@@ -103,22 +103,13 @@ function ruleBased(text: string, context?: ThoughtsContext): ThoughtsResponse {
       return { reply: "Your slate is clear today! Great time to get ahead — want me to help you plan something?", actions: [], provider: "local" };
     }
 
-    // Habit check
-    if (/habit/i.test(lower)) {
-      const undone = context.habits.filter((h) => !h.doneToday);
-      if (undone.length > 0) {
-        return { reply: `You have ${undone.length} habit${undone.length > 1 ? "s" : ""} left for today: ${undone.map((h) => h.name).join(", ")}. Keep the streak going!`, actions: [], provider: "local" };
-      }
-      return { reply: "All habits done for today! 🎉 Great consistency.", actions: [], provider: "local" };
-    }
-
     // Stats / how am I doing
     if (/how am i|progress|stats|doing/i.test(lower)) {
-      const { tasksTotal, tasksDone, skillCount } = context.stats;
+      const { tasksTotal, tasksDone, journalCount } = context.stats;
       const rate = tasksTotal ? Math.round((tasksDone / tasksTotal) * 100) : 0;
       const recentMood = context.recentJournals[0]?.mood;
       return {
-        reply: `Here's your snapshot:\n• Task completion: ${tasksDone}/${tasksTotal} (${rate}%)\n• Skills tracked: ${skillCount}\n• Recent mood: ${recentMood ?? "no data"}\n\nYou're doing ${rate > 60 ? "well" : "okay"} — ${rate > 60 ? "keep it up!" : "let's push a bit harder today."}`,
+        reply: `Here's your snapshot:\n• Task completion: ${tasksDone}/${tasksTotal} (${rate}%)\n• Journal entries: ${journalCount}\n• Recent mood: ${recentMood ?? "no data"}\n\nYou're doing ${rate > 60 ? "well" : "okay"} — ${rate > 60 ? "keep it up!" : "let's push a bit harder today."}`,
         actions: [], provider: "local",
       };
     }

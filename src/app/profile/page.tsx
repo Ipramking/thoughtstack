@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { User, Camera, Save, Trophy, CheckSquare, BookOpen, Zap, X } from "lucide-react";
+import { User, Camera, Save, Trophy, CheckSquare, BookOpen, X } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,7 @@ import { formatDate } from "@/lib/utils";
 import { toast } from "@/hooks/useToast";
 
 export default function ProfilePage() {
-  const { profile, updateProfile, tasks, journals, skills } = useAppStore();
+  const { profile, updateProfile, tasks, journals } = useAppStore();
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({ name: profile.name, email: profile.email, bio: profile.bio ?? "" });
   const fileRef = useRef<HTMLInputElement>(null);
@@ -112,9 +112,9 @@ export default function ProfilePage() {
         {/* Stats */}
         <div className="grid grid-cols-2 gap-3 stagger">
           <StatCard label="Tasks completed" value={tasks.filter((t) => t.status === "done").length} icon={CheckSquare} iconColor="text-green-400" />
-          <StatCard label="Journal entries"  value={journals.length}                                  icon={BookOpen}    iconColor="text-purple-400" />
-          <StatCard label="Skills tracked"   value={skills.length}                                    icon={Zap}         iconColor="text-yellow-400" />
-          <StatCard label="Total XP earned"  value={skills.reduce((a, s) => a + s.totalXp, 0)}        icon={Trophy}      iconColor="text-orange-400" />
+          <StatCard label="Journal entries" value={journals.length}                                  icon={BookOpen}    iconColor="text-purple-400" />
+          <StatCard label="Total tasks"     value={tasks.length}                                     icon={CheckSquare} iconColor="text-blue-400" />
+          <StatCard label="This month"      value={tasks.filter((t) => t.createdAt.startsWith(new Date().toISOString().slice(0,7))).length} icon={Trophy} iconColor="text-orange-400" />
         </div>
       </div>
     </div>
