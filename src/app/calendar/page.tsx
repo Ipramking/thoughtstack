@@ -120,7 +120,7 @@ export default function CalendarPage() {
 
   return (
     <div className="min-h-screen ambient-bg">
-      <div className="px-4 pt-4 pb-nav sm:px-6 sm:pt-6 md:pb-6 space-y-5 page-enter">
+      <div className="px-4 py-5 sm:px-6 sm:py-6 space-y-5 page-enter">
       <PageHeader
         title="Calendar"
         subtitle={`${events.length} events · ${tasks.filter((t) => t.dueDate).length} tasks with dates`}

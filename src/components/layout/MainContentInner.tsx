@@ -10,13 +10,13 @@ export function MainContentInner({ children }: { children: React.ReactNode }) {
     <main
       className={cn(
         "flex-1 min-h-dvh overflow-y-auto overflow-x-hidden transition-[margin] duration-300 ease-in-out",
-        /* Mobile: always full width — no sidebar offset */
-        "ml-0 mr-0",
-        /* md+: sidebar offset */
-        "md:ml-[220px]",
-        sidebarCollapsed && "md:ml-[60px]",
-        /* md+: thoughts panel offset */
-        thoughtsPanelOpen ? "md:mr-[360px]" : "md:mr-0"
+        /* Mobile: full width + top padding for the fixed top bar (56px = h-14) */
+        "ml-0 pt-14",
+        /* Desktop: sidebar offset, no top padding */
+        "md:pt-0 md:ml-[240px]",
+        sidebarCollapsed && "md:ml-[64px]",
+        /* Thoughts panel offset (desktop only) */
+        thoughtsPanelOpen ? "md:mr-[380px]" : "md:mr-0",
       )}
     >
       {children}

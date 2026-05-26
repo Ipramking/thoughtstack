@@ -1,7 +1,7 @@
 {
   "name": "ThoughtStack",
   "short_name": "ThoughtStack",
-  "description": "Your AI-powered personal operating system — tasks, journal, calendar, and a smart AI that knows your context.",
+  "description": "Your AI-powered personal operating system",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
@@ -11,8 +11,20 @@
   "categories": ["productivity", "lifestyle"],
   "icons": [
     {
-      "src": "/icon",
+      "src": "/icon-192",
       "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-192",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icon",
+      "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
@@ -24,9 +36,8 @@
     }
   ],
   "shortcuts": [
-    { "name": "Tasks",      "short_name": "Tasks",   "url": "/tasks",   "description": "View and manage tasks"      },
-    { "name": "Journal",    "short_name": "Journal",  "url": "/journal", "description": "Write a journal entry"      },
-    { "name": "Thoughts AI","short_name": "AI",       "url": "/?ai=1",   "description": "Open Thoughts AI assistant" }
-  ],
-  "screenshots": []
+    { "name": "Tasks",       "url": "/tasks",   "description": "Manage your tasks"     },
+    { "name": "Journal",     "url": "/journal", "description": "Write a journal entry"  },
+    { "name": "Thoughts AI", "url": "/",        "description": "Open AI assistant"      }
+  ]
 }

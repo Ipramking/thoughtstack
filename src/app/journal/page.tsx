@@ -151,7 +151,7 @@ export default function JournalPage() {
 
   return (
     <div className="min-h-screen ambient-bg">
-      <div className="px-4 pt-4 pb-nav sm:px-6 sm:pt-6 md:pb-6 space-y-5 page-enter">
+      <div className="px-4 py-5 sm:px-6 sm:py-6 space-y-5 page-enter">
         <PageHeader
           title="Journal"
           subtitle={`${journals.length} ${journals.length === 1 ? "entry" : "entries"}`}
