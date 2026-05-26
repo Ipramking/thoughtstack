@@ -1,6 +1,14 @@
+// ─── Shared ───────────────────────────────────────────────────────────────────
+
+export interface Location {
+  lat: number;
+  lng: number;
+  label?: string; // reverse-geocoded address or custom label
+}
+
 // ─── Tasks ────────────────────────────────────────────────────────────────────
 
-export type Priority  = "low" | "medium" | "high" | "critical";
+export type Priority   = "low" | "medium" | "high" | "critical";
 export type TaskStatus = "todo" | "in_progress" | "done";
 export type Recurrence = "none" | "daily" | "weekdays" | "weekly" | "monthly";
 
@@ -10,12 +18,13 @@ export interface Task {
   description?: string;
   priority: Priority;
   status: TaskStatus;
-  dueDate?: string;   // YYYY-MM-DD
-  dueTime?: string;   // HH:mm
+  dueDate?: string;    // YYYY-MM-DD
+  dueTime?: string;    // HH:mm
   category?: string;
   reminder?: boolean;
   recurrence?: Recurrence;
-  parentId?: string;  // for recurring instances
+  parentId?: string;   // recurring instances link back to origin
+  location?: Location;
   createdAt: string;
   updatedAt: string;
 }
@@ -27,60 +36,14 @@ export type Mood = "great" | "good" | "neutral" | "bad" | "awful";
 export interface JournalEntry {
   id: string;
   title: string;
-  content: string;   // markdown-compatible plain text
+  content: string;
   mood?: Mood;
   tags: string[];
   folder?: string;
+  photos?: string[];   // base64 data URLs
   aiInsight?: string;
   createdAt: string;
   updatedAt: string;
-}
-
-// ─── Skills & Learning ────────────────────────────────────────────────────────
-
-export type SkillCategory =
-  | "Web3"
-  | "Programming"
-  | "UI/UX"
-  | "Game Development"
-  | "Productivity"
-  | "Branding & Marketing"
-  | "AI Tools Mastery"
-  | "Crypto Trading";
-
-export type MissionStatus = "locked" | "active" | "completed";
-
-export interface Mission {
-  id: string;
-  title: string;
-  description: string;
-  xp: number;
-  status: MissionStatus;
-  dueDate?: string;
-}
-
-export interface SkillModule {
-  id: string;
-  title: string;
-  description: string;
-  duration: string;
-  completed: boolean;
-  order: number;
-}
-
-export interface TrackedSkill {
-  id: string;
-  name: string;
-  category: SkillCategory;
-  description: string;
-  progress: number; // 0–100
-  level: number;
-  xp: number;
-  totalXp: number;
-  missions: Mission[];
-  modules: SkillModule[];
-  startedAt: string;
-  lastActivity: string;
 }
 
 // ─── Calendar ─────────────────────────────────────────────────────────────────
@@ -96,29 +59,9 @@ export interface CalendarEvent {
   startTime?: string;  // HH:mm
   endTime?: string;    // HH:mm
   allDay?: boolean;
-  color?: string;
-  taskId?: string;
+  location?: Location;
   reminder?: boolean;
   createdAt: string;
-}
-
-// ─── Habits ───────────────────────────────────────────────────────────────────
-
-export type HabitFrequency = "daily" | "weekdays" | "weekends" | "weekly";
-
-export interface Habit {
-  id: string;
-  name: string;
-  emoji: string;
-  color: string;   // e.g. "green", "blue", "orange" — maps to Tailwind colour classes
-  frequency: HabitFrequency;
-  targetDays?: number[]; // 0-6 (Sun-Sat) for "weekly" frequency
-  createdAt: string;
-}
-
-export interface HabitLog {
-  habitId: string;
-  date: string; // YYYY-MM-DD
 }
 
 // ─── Thoughts AI ──────────────────────────────────────────────────────────────
@@ -139,13 +82,12 @@ export interface ThoughtsAction {
   data: Record<string, unknown>;
 }
 
-// Context passed to the AI from the current store state
+/** Snapshot of the user's world — sent to the AI for every message */
 export interface ThoughtsContext {
-  todayTasks:    Array<{ title: string; priority: string; status: string; dueTime?: string }>;
-  todayEvents:   Array<{ title: string; startTime?: string; type: string }>;
-  recentJournals:Array<{ title: string; mood?: string; date: string }>;
-  habits:        Array<{ name: string; doneToday: boolean; streak: number }>;
-  stats:         { tasksTotal: number; tasksDone: number; skillCount: number };
+  todayTasks:     Array<{ title: string; priority: string; status: string; dueTime?: string }>;
+  todayEvents:    Array<{ title: string; startTime?: string; type: string }>;
+  recentJournals: Array<{ title: string; mood?: string; date: string }>;
+  stats:          { tasksTotal: number; tasksDone: number; journalCount: number };
 }
 
 // ─── User / Profile ───────────────────────────────────────────────────────────
@@ -158,7 +100,7 @@ export interface UserProfile {
   joinedAt: string;
 }
 
-// ─── Analytics ────────────────────────────────────────────────────────────────
+// ─── Analytics (lightweight) ──────────────────────────────────────────────────
 
 export interface DailyStats {
   date: string;
@@ -166,5 +108,4 @@ export interface DailyStats {
   tasksCreated: number;
   journalEntries: number;
   mood?: Mood;
-  studyMinutes: number;
 }

@@ -1,379 +1,292 @@
 "use client";
 
-import { useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import Link from "next/link";
 import {
-  CheckSquare, BookOpen, Zap, Calendar, BarChart2,
-  Brain, TrendingUp, Clock, Flame, ArrowRight, Plus,
-  Sparkles, CheckCircle2, Circle,
+  Sparkles, ArrowRight, Plus, CheckCircle2,
+  Circle, Flame, BookOpen, Calendar, Loader2, Brain,
 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
-import { StatCard } from "@/components/ui/stat-card";
-import { EmptyState } from "@/components/ui/empty-state";
-import { isToday, formatDate, cn } from "@/lib/utils";
+import { callThoughts } from "@/lib/thoughts-ai";
+import { ThoughtsAction, ThoughtsContext } from "@/types";
+import { cn, isToday, formatDate } from "@/lib/utils";
+import { toast } from "@/hooks/useToast";
+import { format } from "date-fns";
+
+const PRIORITY_DOT: Record<string, string> = {
+  low:      "bg-blue-400",
+  medium:   "bg-yellow-400",
+  high:     "bg-orange-400",
+  critical: "bg-red-400",
+};
 
 const MOOD_EMOJI: Record<string, string> = {
   great: "😄", good: "🙂", neutral: "😐", bad: "😕", awful: "😞",
 };
 
-const PRIORITY_DOT: Record<string, string> = {
-  low: "bg-blue-400", medium: "bg-yellow-400",
-  high: "bg-orange-400", critical: "bg-red-400",
+const GREET = () => {
+  const h = new Date().getHours();
+  if (h < 12) return "Good morning";
+  if (h < 17) return "Good afternoon";
+  return "Good evening";
 };
 
 export default function HomePage() {
-  const { tasks, journals, skills, events, profile, toggleThoughtsPanel, habits, isHabitDone, toggleHabitLog, getHabitStreak } = useAppStore();
+  const { tasks, journals, events, profile, addTask, addEvent, completeTask, toggleThoughtsPanel } = useAppStore();
 
-  const todayTasks = useMemo(
-    () => tasks.filter((t) => t.dueDate && isToday(t.dueDate) && t.status !== "done"),
-    [tasks]
-  );
-  const completedToday = useMemo(
-    () => tasks.filter((t) => t.status === "done" && t.updatedAt && isToday(t.updatedAt)).length,
-    [tasks]
-  );
-  const todayEvents = useMemo(
-    () => events.filter((e) => isToday(e.date))
-      .sort((a, b) => (a.startTime ?? "").localeCompare(b.startTime ?? "")),
-    [events]
-  );
-  const recentJournal = journals[0];
-  const activeSkills  = skills.filter((s) => s.progress < 100);
-  const completionRate = tasks.length
-    ? Math.round((tasks.filter((t) => t.status === "done").length / tasks.length) * 100)
-    : 0;
+  const [capture, setCapture]   = useState("");
+  const [aiLoading, setAiLoad]  = useState(false);
+  const [aiResult, setAiResult] = useState<{ reply: string; actions: ThoughtsAction[] } | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  const greeting = () => {
-    const h = new Date().getHours();
-    if (h < 12) return "Good morning";
-    if (h < 17) return "Good afternoon";
-    return "Good evening";
-  };
+  const todayStr    = format(new Date(), "yyyy-MM-dd");
+  const todayTasks  = useMemo(() => tasks.filter((t) => t.status !== "done" && (!t.dueDate || isToday(t.dueDate))), [tasks]);
+  const todayEvents = useMemo(() => events.filter((e) => e.date === todayStr).sort((a, b) => (a.startTime ?? "").localeCompare(b.startTime ?? "")), [events, todayStr]);
+  const recentEntry = journals[0];
+  const firstName   = profile.name.split(" ")[0] || "there";
 
-  const firstName = profile.name.split(" ")[0];
+  const context = useMemo((): ThoughtsContext => ({
+    todayTasks: todayTasks.slice(0, 8).map((t) => ({ title: t.title, priority: t.priority, status: t.status, dueTime: t.dueTime })),
+    todayEvents: todayEvents.slice(0, 5).map((e) => ({ title: e.title, startTime: e.startTime, type: e.type })),
+    recentJournals: journals.slice(0, 3).map((j) => ({ title: j.title, mood: j.mood, date: j.createdAt.split("T")[0] })),
+    stats: { tasksTotal: tasks.length, tasksDone: tasks.filter((t) => t.status === "done").length, journalCount: journals.length },
+  }), [todayTasks, todayEvents, journals, tasks]);
+
+  async function handleCapture() {
+    const text = capture.trim();
+    if (!text || aiLoading) return;
+    setAiLoad(true);
+    setAiResult(null);
+    try {
+      const res = await callThoughts(text, [], context);
+      setAiResult({ reply: res.reply, actions: res.actions ?? [] });
+    } catch {
+      toast.error("Couldn't reach Thoughts — try again");
+    } finally {
+      setAiLoad(false);
+    }
+  }
+
+  function applyAction(action: ThoughtsAction) {
+    if (action.type === "create_task") {
+      const d = action.data as { title: string; priority?: string; dueDate?: string; dueTime?: string };
+      addTask({ title: d.title, priority: (d.priority as "low"|"medium"|"high"|"critical") ?? "medium", status: "todo", dueDate: d.dueDate, dueTime: d.dueTime, reminder: false });
+      toast.success(`Task created: "${d.title}"`);
+    } else if (action.type === "create_event") {
+      const d = action.data as { title: string; date: string; startTime?: string; type?: string };
+      addEvent({ title: d.title, date: d.date, startTime: d.startTime, type: (d.type as "meeting"|"task"|"reminder"|"personal"|"study") ?? "meeting", reminder: false });
+      toast.success(`Added to calendar: "${d.title}"`);
+    }
+    setAiResult((r) => r ? { ...r, actions: r.actions.filter((a) => a !== action) } : null);
+  }
+
+  function dismissResult() {
+    setAiResult(null);
+    setCapture("");
+    inputRef.current?.focus();
+  }
 
   return (
     <div className="min-h-screen ambient-bg">
-      <div className="px-4 pt-4 pb-nav sm:px-6 sm:pt-6 md:pb-6 space-y-6 page-enter">
+      <div className="px-4 pt-5 pb-nav sm:px-6 sm:pt-6 md:pb-6 space-y-6 page-enter max-w-2xl mx-auto">
 
-        {/* ── Hero header ── */}
-        <div className="flex items-start justify-between gap-4 pt-2">
+        {/* ── Greeting ── */}
+        <div className="flex items-start justify-between">
           <div>
-            <p className="text-sm text-muted-foreground mb-0.5">{formatDate(new Date())}</p>
-            <h1 className="text-2xl font-bold tracking-tight">
-              {greeting()}, {firstName} 👋
+            <p className="text-xs text-muted-foreground font-medium">{formatDate(new Date())}</p>
+            <h1 className="text-2xl font-bold tracking-tight mt-0.5">
+              {GREET()}, {firstName} 👋
             </h1>
           </div>
-          <Button
+          <button
             onClick={toggleThoughtsPanel}
-            size="sm"
-            className="gap-2 rounded-xl shadow-sm"
+            className="w-10 h-10 rounded-2xl bg-foreground flex items-center justify-center shrink-0 shadow-sm hover:opacity-90 transition-opacity active:scale-95"
           >
-            <Sparkles className="w-3.5 h-3.5" />
-            Ask Thoughts
-          </Button>
+            <Brain className="w-5 h-5 text-background" />
+          </button>
         </div>
 
-        {/* ── Stats row ── */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 stagger">
-          <StatCard
-            label="Tasks today"
-            value={todayTasks.length}
-            sub={`${completedToday} completed`}
-            icon={Flame}
-            iconColor="text-orange-400"
-          />
-          <StatCard
-            label="Completion"
-            value={`${completionRate}%`}
-            sub={`${tasks.filter(t => t.status === "done").length} total done`}
-            icon={TrendingUp}
-            iconColor="text-green-400"
-          />
-          <StatCard
-            label="Active skills"
-            value={activeSkills.length}
-            sub={`${skills.length} tracked`}
-            icon={Zap}
-            iconColor="text-yellow-400"
-          />
-          <StatCard
-            label="Events today"
-            value={todayEvents.length}
-            sub={todayEvents[0] ? `Next: ${todayEvents[0].startTime ?? "all day"}` : "None scheduled"}
-            icon={Calendar}
-            iconColor="text-purple-400"
-          />
+        {/* ── Quick Capture ── */}
+        <div className="space-y-3">
+          <div className="relative">
+            <textarea
+              ref={inputRef}
+              value={capture}
+              onChange={(e) => { setCapture(e.target.value); e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 140) + "px"; }}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleCapture(); } }}
+              placeholder="What's on your mind? Thoughts will read it and act…"
+              rows={2}
+              disabled={aiLoading}
+              className={cn(
+                "w-full resize-none rounded-2xl bg-card border border-border",
+                "px-4 py-3.5 pr-14 text-sm leading-relaxed placeholder:text-muted-foreground/60",
+                "focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent",
+                "transition-all scrollbar-hide disabled:opacity-60",
+              )}
+              style={{ minHeight: "80px" }}
+            />
+            <button
+              onClick={handleCapture}
+              disabled={!capture.trim() || aiLoading}
+              className={cn(
+                "absolute right-3 bottom-3 w-8 h-8 rounded-xl flex items-center justify-center",
+                "bg-primary text-primary-foreground transition-all hover:opacity-90 active:scale-95",
+                "disabled:opacity-30 disabled:cursor-not-allowed disabled:active:scale-100",
+              )}
+            >
+              {aiLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+            </button>
+          </div>
+
+          {/* AI result card */}
+          {aiResult && (
+            <div className="rounded-2xl border border-border bg-card p-4 space-y-3 animate-fade-up">
+              <div className="flex items-start gap-2">
+                <div className="w-6 h-6 rounded-lg bg-foreground flex items-center justify-center shrink-0 mt-0.5">
+                  <Brain className="w-3.5 h-3.5 text-background" />
+                </div>
+                <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap flex-1">{aiResult.reply}</p>
+              </div>
+              {aiResult.actions.length > 0 && (
+                <div className="flex flex-col gap-1.5 pl-8">
+                  {aiResult.actions.map((action, i) => (
+                    <button
+                      key={i}
+                      onClick={() => applyAction(action)}
+                      className="text-left text-xs px-3.5 py-2.5 rounded-xl border border-border hover:bg-accent transition-colors flex items-center gap-2 min-h-[44px] font-medium"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-primary shrink-0" />
+                      {action.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <button onClick={dismissResult} className="w-full text-[11px] text-muted-foreground hover:text-foreground transition-colors pt-1 font-medium">
+                Dismiss
+              </button>
+            </div>
+          )}
         </div>
 
-        {/* ── Main grid ── */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* ── Today's Focus ── */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between px-1">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+              <Flame className="w-3.5 h-3.5 text-orange-400" /> Today&apos;s Focus
+            </p>
+            <Link href="/tasks" className="text-[11px] text-muted-foreground hover:text-foreground flex items-center gap-0.5 transition-colors">
+              View all <ArrowRight className="w-3 h-3" />
+            </Link>
+          </div>
 
-          {/* Left col — tasks + schedule */}
-          <div className="lg:col-span-2 space-y-4">
-
-            {/* Today's Tasks */}
-            <Card className="overflow-hidden">
-              <CardHeader className="flex flex-row items-center justify-between pb-3 pt-5 px-5">
-                <CardTitle className="text-base font-semibold flex items-center gap-2">
-                  <Flame className="w-4 h-4 text-orange-400" />
-                  Today&apos;s Tasks
-                </CardTitle>
+          {todayTasks.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 py-8 rounded-2xl border border-dashed border-border text-center">
+              <CheckCircle2 className="w-7 h-7 text-muted-foreground/40" />
+              <p className="text-sm text-muted-foreground">Nothing due today — great job!</p>
+              <Link href="/tasks">
+                <button className="text-xs font-medium text-primary flex items-center gap-1 hover:underline">
+                  <Plus className="w-3.5 h-3.5" /> Add a task
+                </button>
+              </Link>
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-border bg-card overflow-hidden divide-y divide-border">
+              {todayTasks.slice(0, 5).map((task) => (
+                <div key={task.id} className="flex items-center gap-3 px-4 py-3 group">
+                  <button
+                    onClick={() => completeTask(task.id)}
+                    className="shrink-0 touch-target -ml-1.5 text-muted-foreground hover:text-primary transition-colors"
+                  >
+                    <Circle className="w-5 h-5" />
+                  </button>
+                  <div className={cn("w-2 h-2 rounded-full shrink-0", PRIORITY_DOT[task.priority])} />
+                  <p className="flex-1 text-sm font-medium truncate">{task.title}</p>
+                  {task.dueTime && (
+                    <span className="text-[11px] text-muted-foreground shrink-0">{task.dueTime}</span>
+                  )}
+                </div>
+              ))}
+              {todayTasks.length > 5 && (
                 <Link href="/tasks">
-                  <Button variant="ghost" size="sm" className="gap-1 text-xs h-8 rounded-lg">
-                    View all <ArrowRight className="w-3 h-3" />
-                  </Button>
-                </Link>
-              </CardHeader>
-              <CardContent className="px-5 pb-5 pt-0 space-y-1.5">
-                {todayTasks.length === 0 ? (
-                  <EmptyState
-                    icon={CheckSquare}
-                    title="No tasks due today"
-                    description="Enjoy your free time or plan ahead."
-                    action={
-                      <Link href="/tasks">
-                        <Button size="sm" variant="outline" className="gap-1 rounded-lg">
-                          <Plus className="w-3.5 h-3.5" /> Add task
-                        </Button>
-                      </Link>
-                    }
-                    className="py-8"
-                  />
-                ) : (
-                  todayTasks.slice(0, 5).map((task) => (
-                    <Link key={task.id} href="/tasks">
-                      <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-muted/60 transition-colors cursor-pointer group">
-                        <div className={cn(
-                          "w-2 h-2 rounded-full shrink-0 transition-transform group-hover:scale-125",
-                          PRIORITY_DOT[task.priority]
-                        )} />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{task.title}</p>
-                          {task.dueTime && (
-                            <p className="text-xs text-muted-foreground">{task.dueTime}</p>
-                          )}
-                        </div>
-                        <span className="text-[10px] font-medium text-muted-foreground capitalize bg-muted px-2 py-0.5 rounded-md shrink-0">
-                          {task.priority}
-                        </span>
-                      </div>
-                    </Link>
-                  ))
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Today's Schedule */}
-            <Card className="overflow-hidden">
-              <CardHeader className="flex flex-row items-center justify-between pb-3 pt-5 px-5">
-                <CardTitle className="text-base font-semibold flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-purple-400" />
-                  Today&apos;s Schedule
-                </CardTitle>
-                <Link href="/calendar">
-                  <Button variant="ghost" size="sm" className="gap-1 text-xs h-8 rounded-lg">
-                    Calendar <ArrowRight className="w-3 h-3" />
-                  </Button>
-                </Link>
-              </CardHeader>
-              <CardContent className="px-5 pb-5 pt-0 space-y-2">
-                {todayEvents.length === 0 ? (
-                  <EmptyState
-                    icon={Calendar}
-                    title="Nothing scheduled"
-                    description="Your day is open — add an event."
-                    className="py-8"
-                  />
-                ) : (
-                  todayEvents.map((event) => (
-                    <div key={event.id} className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-muted/40">
-                      <div className="text-xs text-muted-foreground w-14 shrink-0 font-medium text-right">
-                        {event.startTime ?? "All day"}
-                      </div>
-                      <div className="w-px h-6 bg-border shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{event.title}</p>
-                        <p className="text-xs text-muted-foreground capitalize">{event.type}</p>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Right col */}
-          <div className="space-y-4">
-
-            {/* Skills */}
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-3 pt-5 px-5">
-                <CardTitle className="text-base font-semibold flex items-center gap-2">
-                  <Zap className="w-4 h-4 text-yellow-400" />
-                  Learning
-                </CardTitle>
-                <Link href="/skills">
-                  <Button variant="ghost" size="sm" className="gap-1 text-xs h-8 rounded-lg">
-                    Skills <ArrowRight className="w-3 h-3" />
-                  </Button>
-                </Link>
-              </CardHeader>
-              <CardContent className="px-5 pb-5 pt-0 space-y-4">
-                {activeSkills.length === 0 ? (
-                  <EmptyState
-                    icon={Zap}
-                    title="No skills tracked"
-                    action={
-                      <Link href="/skills">
-                        <Button size="sm" variant="outline" className="gap-1 rounded-lg text-xs">
-                          <Plus className="w-3 h-3" /> Track a skill
-                        </Button>
-                      </Link>
-                    }
-                    className="py-6"
-                  />
-                ) : (
-                  activeSkills.slice(0, 3).map((skill) => (
-                    <div key={skill.id} className="space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <p className="text-sm font-medium">{skill.name}</p>
-                        <span className="text-xs text-muted-foreground">Lv.{skill.level}</span>
-                      </div>
-                      <Progress value={skill.progress} className="h-1.5" />
-                      <p className="text-xs text-muted-foreground">{skill.progress}% · {skill.xp} XP</p>
-                    </div>
-                  ))
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Habits today */}
-            {habits.length > 0 && (() => {
-              const todayStr = new Date().toISOString().split("T")[0];
-              return (
-                <Card>
-                  <CardHeader className="flex flex-row items-center justify-between pb-3 pt-5 px-5">
-                    <CardTitle className="text-base font-semibold flex items-center gap-2">
-                      <Flame className="w-4 h-4 text-orange-400" />
-                      Habits
-                    </CardTitle>
-                    <Link href="/habits">
-                      <Button variant="ghost" size="sm" className="gap-1 text-xs h-8 rounded-lg">
-                        All <ArrowRight className="w-3 h-3" />
-                      </Button>
-                    </Link>
-                  </CardHeader>
-                  <CardContent className="px-5 pb-5 pt-0 space-y-2">
-                    {habits.slice(0, 4).map((h) => {
-                      const done   = isHabitDone(h.id, todayStr);
-                      const streak = getHabitStreak(h.id);
-                      return (
-                        <button
-                          key={h.id}
-                          onClick={() => toggleHabitLog(h.id, todayStr)}
-                          className={cn(
-                            "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-left",
-                            done ? "bg-green-500/10" : "hover:bg-muted/60"
-                          )}
-                        >
-                          {done
-                            ? <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
-                            : <Circle       className="w-4 h-4 text-muted-foreground shrink-0" />
-                          }
-                          <span className="text-lg leading-none shrink-0">{h.emoji}</span>
-                          <span className={cn("text-sm font-medium flex-1 truncate", done && "line-through text-muted-foreground")}>
-                            {h.name}
-                          </span>
-                          {streak > 0 && (
-                            <span className="text-[10px] font-bold text-orange-400 shrink-0">🔥{streak}</span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </CardContent>
-                </Card>
-              );
-            })()}
-
-            {/* Journal */}
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-3 pt-5 px-5">
-                <CardTitle className="text-base font-semibold flex items-center gap-2">
-                  <BookOpen className="w-4 h-4 text-green-400" />
-                  Journal
-                </CardTitle>
-                <Link href="/journal">
-                  <Button variant="ghost" size="sm" className="gap-1 text-xs h-8 rounded-lg">
-                    Open <ArrowRight className="w-3 h-3" />
-                  </Button>
-                </Link>
-              </CardHeader>
-              <CardContent className="px-5 pb-5 pt-0">
-                {recentJournal ? (
-                  <Link href="/journal">
-                    <div className="p-3 rounded-xl bg-muted/40 hover:bg-muted/70 transition-colors cursor-pointer">
-                      <div className="flex items-center gap-2 mb-1.5">
-                        <span className="text-xl">{MOOD_EMOJI[recentJournal.mood ?? "neutral"]}</span>
-                        <p className="text-sm font-semibold truncate">{recentJournal.title}</p>
-                      </div>
-                      <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
-                        {recentJournal.content}
-                      </p>
-                      <p className="text-[10px] text-muted-foreground mt-2">
-                        {formatDate(recentJournal.createdAt)}
-                      </p>
-                    </div>
-                  </Link>
-                ) : (
-                  <EmptyState
-                    icon={BookOpen}
-                    title="No entries yet"
-                    action={
-                      <Link href="/journal">
-                        <Button size="sm" variant="outline" className="gap-1 rounded-lg text-xs">
-                          <Plus className="w-3 h-3" /> Write first entry
-                        </Button>
-                      </Link>
-                    }
-                    className="py-6"
-                  />
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Quick stats */}
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-3 pt-5 px-5">
-                <CardTitle className="text-base font-semibold flex items-center gap-2">
-                  <BarChart2 className="w-4 h-4 text-blue-400" />
-                  Quick Stats
-                </CardTitle>
-                <Link href="/analytics">
-                  <Button variant="ghost" size="sm" className="gap-1 text-xs h-8 rounded-lg">
-                    Full report <ArrowRight className="w-3 h-3" />
-                  </Button>
-                </Link>
-              </CardHeader>
-              <CardContent className="px-5 pb-5 pt-0 grid grid-cols-2 gap-2">
-                {[
-                  { label: "Total tasks",  value: tasks.length  },
-                  { label: "Journals",     value: journals.length },
-                  { label: "Skills",       value: skills.length  },
-                  { label: "Events",       value: events.length  },
-                ].map(({ label, value }) => (
-                  <div key={label} className="text-center p-2.5 rounded-xl bg-muted/40">
-                    <p className="text-xl font-bold">{value}</p>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">{label}</p>
+                  <div className="px-4 py-3 text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1">
+                    +{todayTasks.length - 5} more tasks <ArrowRight className="w-3 h-3" />
                   </div>
-                ))}
-              </CardContent>
-            </Card>
-          </div>
+                </Link>
+              )}
+            </div>
+          )}
         </div>
+
+        {/* ── Today's Events ── */}
+        {todayEvents.length > 0 && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between px-1">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5 text-purple-400" /> Today&apos;s Schedule
+              </p>
+              <Link href="/calendar" className="text-[11px] text-muted-foreground hover:text-foreground flex items-center gap-0.5 transition-colors">
+                Calendar <ArrowRight className="w-3 h-3" />
+              </Link>
+            </div>
+            <div className="rounded-2xl border border-border bg-card overflow-hidden divide-y divide-border">
+              {todayEvents.slice(0, 3).map((event) => (
+                <div key={event.id} className="flex items-center gap-3 px-4 py-3">
+                  <span className="text-xs text-muted-foreground w-12 shrink-0 font-medium">
+                    {event.startTime ?? "All day"}
+                  </span>
+                  <div className="w-px h-4 bg-border shrink-0" />
+                  <p className="flex-1 text-sm font-medium truncate">{event.title}</p>
+                  <span className="text-[10px] text-muted-foreground capitalize bg-muted px-2 py-0.5 rounded-full">{event.type}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── Recent Journal ── */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between px-1">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+              <BookOpen className="w-3.5 h-3.5 text-green-400" /> Latest Journal
+            </p>
+            <Link href="/journal" className="text-[11px] text-muted-foreground hover:text-foreground flex items-center gap-0.5 transition-colors">
+              All entries <ArrowRight className="w-3 h-3" />
+            </Link>
+          </div>
+
+          {recentEntry ? (
+            <Link href="/journal">
+              <div className="rounded-2xl border border-border bg-card p-4 hover:bg-accent/40 transition-colors cursor-pointer">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xl">{MOOD_EMOJI[recentEntry.mood ?? "neutral"]}</span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold truncate">{recentEntry.title}</p>
+                    <p className="text-[11px] text-muted-foreground">{formatDate(recentEntry.createdAt)}</p>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">{recentEntry.content}</p>
+                {recentEntry.tags.length > 0 && (
+                  <div className="flex gap-1 mt-2 flex-wrap">
+                    {recentEntry.tags.slice(0, 3).map((tag) => (
+                      <span key={tag} className="text-[10px] text-muted-foreground">#{tag}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </Link>
+          ) : (
+            <Link href="/journal">
+              <div className="flex flex-col items-center gap-2 py-8 rounded-2xl border border-dashed border-border text-center hover:bg-accent/20 transition-colors cursor-pointer">
+                <BookOpen className="w-7 h-7 text-muted-foreground/40" />
+                <p className="text-sm text-muted-foreground">No journal entries yet</p>
+                <p className="text-xs font-medium text-primary flex items-center gap-1">
+                  <Plus className="w-3.5 h-3.5" /> Write your first entry
+                </p>
+              </div>
+            </Link>
+          )}
+        </div>
+
       </div>
     </div>
   );

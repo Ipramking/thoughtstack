@@ -14,34 +14,47 @@ export const viewport: Viewport = {
     { media: "(prefers-color-scheme: dark)",  color: "#0d0d0d" },
     { media: "(prefers-color-scheme: light)", color: "#f9f9f9" },
   ],
-  width: "device-width",
-  initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
-  // Shrinks the visual viewport when the soft keyboard appears,
-  // so fixed/absolute positioned elements (ThoughtsPanel input) stay visible
-  viewportFit: "cover",
+  width:           "device-width",
+  initialScale:    1,
+  maximumScale:    1,
+  userScalable:    false,
+  viewportFit:     "cover",
   interactiveWidget: "resizes-visual",
 };
 
 export const metadata: Metadata = {
-  title: "ThoughtStack — Your Personal OS",
-  description: "An AI-powered personal operating system for productivity, learning, and growth.",
-  manifest: "/manifest.json",
+  title:       "ThoughtStack",
+  description: "Your AI-powered personal OS — tasks, journal, calendar, and a smart AI that knows your context.",
+  manifest:    "/manifest.json",
   appleWebApp: {
-    capable: true,
-    statusBarStyle: "black-translucent",
-    title: "ThoughtStack",
+    capable:         true,
+    statusBarStyle:  "black-translucent",
+    title:           "ThoughtStack",
   },
   icons: {
-    icon: "/icon",
-    apple: "/icon",
+    icon:        [{ url: "/icon", sizes: "512x512", type: "image/png" }],
+    apple:       [{ url: "/icon", sizes: "512x512", type: "image/png" }],
+    shortcut:    "/icon",
+  },
+  other: {
+    // iOS-specific meta tags
+    "mobile-web-app-capable":         "yes",
+    "apple-mobile-web-app-capable":   "yes",
+    "apple-mobile-web-app-status-bar-style": "black-translucent",
+    "apple-mobile-web-app-title":     "ThoughtStack",
+    // MS tile
+    "msapplication-TileColor":        "#0d0d0d",
+    "msapplication-tap-highlight":    "no",
   },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        {/* Splash screens / touch startup image (iOS) */}
+        <link rel="apple-touch-startup-image" href="/icon" />
+      </head>
       <body className={`${inter.variable} font-sans antialiased`}>
         <SessionWrapper>
           <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>

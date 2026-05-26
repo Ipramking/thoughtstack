@@ -1,6 +1,7 @@
 import { ImageResponse } from "next/og";
 
-export const size = { width: 192, height: 192 };
+// 512×512 — used by manifest + apple-touch-icon
+export const size        = { width: 512, height: 512 };
 export const contentType = "image/png";
 
 export default function Icon() {
@@ -8,29 +9,27 @@ export default function Icon() {
     (
       <div
         style={{
-          width: "100%",
-          height: "100%",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
+          width: "100%", height: "100%",
+          display: "flex", alignItems: "center", justifyContent: "center",
           background: "#0d0d0d",
-          borderRadius: "40px",
+          borderRadius: "112px",   // ~22% of 512px — matches iOS squircle
         }}
       >
+        {/* "T" wordmark */}
         <div
           style={{
-            fontSize: 110,
-            fontWeight: 900,
+            fontSize: 300, fontWeight: 900,
             color: "#ffffff",
-            letterSpacing: "-4px",
             fontFamily: "sans-serif",
             lineHeight: 1,
+            letterSpacing: "-8px",
+            marginTop: "16px",
           }}
         >
           T
         </div>
       </div>
     ),
-    size
+    size,
   );
 }

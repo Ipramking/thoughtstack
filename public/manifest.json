@@ -1,8 +1,9 @@
 {
   "name": "ThoughtStack",
   "short_name": "ThoughtStack",
-  "description": "Your AI-powered personal operating system",
+  "description": "Your AI-powered personal operating system — tasks, journal, calendar, and a smart AI that knows your context.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#0d0d0d",
   "theme_color": "#0d0d0d",
@@ -23,20 +24,9 @@
     }
   ],
   "shortcuts": [
-    {
-      "name": "Tasks",
-      "url": "/tasks",
-      "description": "View your tasks"
-    },
-    {
-      "name": "Journal",
-      "url": "/journal",
-      "description": "Write a journal entry"
-    },
-    {
-      "name": "Thoughts AI",
-      "url": "/?thoughts=open",
-      "description": "Open Thoughts AI"
-    }
-  ]
+    { "name": "Tasks",      "short_name": "Tasks",   "url": "/tasks",   "description": "View and manage tasks"      },
+    { "name": "Journal",    "short_name": "Journal",  "url": "/journal", "description": "Write a journal entry"      },
+    { "name": "Thoughts AI","short_name": "AI",       "url": "/?ai=1",   "description": "Open Thoughts AI assistant" }
+  ],
+  "screenshots": []
 }

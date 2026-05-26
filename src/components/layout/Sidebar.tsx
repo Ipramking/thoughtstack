@@ -5,9 +5,9 @@ import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
 import { signOut, useSession } from "next-auth/react";
 import {
-  Home, CheckSquare, BookOpen, Zap, Calendar, User,
-  Settings, Download, Brain, ChevronLeft, ChevronRight,
-  Sun, Moon, BarChart2, LogOut, Shield, Flame,
+  Home, CheckSquare, BookOpen, Calendar, User,
+  Settings, Brain, ChevronLeft, ChevronRight,
+  Sun, Moon, LogOut, Shield,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/useAppStore";
@@ -15,20 +15,14 @@ import { Button } from "@/components/ui/button";
 
 const NAV = {
   Core: [
-    { href: "/",          icon: Home,        label: "Home"      },
-    { href: "/tasks",     icon: CheckSquare, label: "Tasks"     },
-    { href: "/journal",   icon: BookOpen,    label: "Journal"   },
-    { href: "/skills",    icon: Zap,         label: "Skills"    },
-    { href: "/calendar",  icon: Calendar,    label: "Calendar"  },
-    { href: "/habits",    icon: Flame,       label: "Habits"    },
-    { href: "/analytics", icon: BarChart2,   label: "Analytics" },
+    { href: "/",         icon: Home,        label: "Home"     },
+    { href: "/tasks",    icon: CheckSquare, label: "Tasks"    },
+    { href: "/journal",  icon: BookOpen,    label: "Journal"  },
+    { href: "/calendar", icon: Calendar,    label: "Calendar" },
   ],
-  Personal: [
-    { href: "/profile",   icon: User,        label: "Profile"   },
-  ],
-  System: [
-    { href: "/settings",  icon: Settings,    label: "Settings"  },
-    { href: "/export",    icon: Download,    label: "Export"    },
+  Account: [
+    { href: "/profile",  icon: User,        label: "Profile"  },
+    { href: "/settings", icon: Settings,    label: "Settings" },
   ],
 };
 

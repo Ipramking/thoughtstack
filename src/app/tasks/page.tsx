@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import {
   Plus, Search, CheckCircle2, Circle, Clock,
   Trash2, Edit2, Flame, Calendar, Brain, Filter,
+  MapPin, Repeat, Bell, BellOff, Loader2,
 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
-import { Task, Priority, Recurrence } from "@/types";
+import { Task, Priority, Recurrence, Location } from "@/types";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,11 +16,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { PageHeader } from "@/components/ui/page-header";
-import { StatCard } from "@/components/ui/stat-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { cn, isToday, formatDate } from "@/lib/utils";
+import { useNotifications } from "@/hooks/useNotifications";
+import { useGeolocation } from "@/hooks/useGeolocation";
+import { toast } from "@/hooks/useToast";
 
-const PRIORITY_OPTIONS: Priority[] = ["low", "medium", "high", "critical"];
+const PRIORITY_OPTIONS: Priority[]       = ["low", "medium", "high", "critical"];
+const RECURRENCE_OPTIONS: Recurrence[]   = ["none", "daily", "weekdays", "weekly", "monthly"];
 
 const PRIORITY_STYLES: Record<Priority, { dot: string; badge: string }> = {
   low:      { dot: "bg-blue-400",   badge: "bg-blue-500/10 text-blue-400 border-blue-500/20"     },
@@ -28,39 +32,32 @@ const PRIORITY_STYLES: Record<Priority, { dot: string; badge: string }> = {
   critical: { dot: "bg-red-400",    badge: "bg-red-500/10 text-red-400 border-red-500/20"         },
 };
 
-const RECURRENCE_OPTIONS: { value: Recurrence; label: string }[] = [
-  { value: "none",     label: "Does not repeat"  },
-  { value: "daily",    label: "Every day"         },
-  { value: "weekdays", label: "Weekdays (Mon–Fri)" },
-  { value: "weekly",   label: "Every week"        },
-  { value: "monthly",  label: "Every month"       },
-];
-
 interface TaskFormData {
-  title: string; description: string; priority: Priority;
-  dueDate: string; dueTime: string; category: string;
-  reminder: boolean; recurrence: Recurrence;
+  title: string; description: string; priority: Priority; recurrence: Recurrence;
+  dueDate: string; dueTime: string; category: string; reminder: boolean;
+  location: Location | null;
 }
 const DEFAULT_FORM: TaskFormData = {
-  title: "", description: "", priority: "medium",
-  dueDate: "", dueTime: "", category: "", reminder: false, recurrence: "none",
+  title: "", description: "", priority: "medium", recurrence: "none",
+  dueDate: "", dueTime: "", category: "", reminder: false, location: null,
 };
 
 export default function TasksPage() {
-  const { tasks, addTask, updateTask, deleteTask, completeTask, toggleThoughtsPanel, notificationsEnabled, setNotificationsEnabled } = useAppStore();
-  const [search,         setSearch]         = useState("");
-  const [filterPriority, setFilterPriority] = useState<Priority | "all">("all");
-  const [dialogOpen,     setDialogOpen]     = useState(false);
-  const [editId,         setEditId]         = useState<string | null>(null);
-  const [form,           setForm]           = useState<TaskFormData>(DEFAULT_FORM);
+  const { tasks, addTask, updateTask, deleteTask, completeTask, toggleThoughtsPanel } = useAppStore();
+  const { notificationsEnabled, requestPermission, scheduleReminder } = useNotifications();
+  const { loading: geoLoading, getLocation, openInMaps } = useGeolocation();
+
+  const [search,         setSearch]     = useState("");
+  const [filterPriority, setFilter]     = useState<Priority | "all">("all");
+  const [dialogOpen,     setDialogOpen] = useState(false);
+  const [editId,         setEditId]     = useState<string | null>(null);
+  const [form,           setForm]       = useState<TaskFormData>(DEFAULT_FORM);
 
   const filtered = useMemo(() =>
     tasks.filter((t) =>
       t.title.toLowerCase().includes(search.toLowerCase()) &&
       (filterPriority === "all" || t.priority === filterPriority)
-    ),
-    [tasks, search, filterPriority]
-  );
+    ), [tasks, search, filterPriority]);
 
   const todayTasks    = filtered.filter((t) => t.dueDate && isToday(t.dueDate) && t.status !== "done");
   const upcomingTasks = filtered.filter((t) => (!t.dueDate || !isToday(t.dueDate)) && t.status !== "done");
@@ -71,54 +68,38 @@ export default function TasksPage() {
     setEditId(task.id);
     setForm({
       title: task.title, description: task.description ?? "", priority: task.priority,
+      recurrence: task.recurrence ?? "none",
       dueDate: task.dueDate ?? "", dueTime: task.dueTime ?? "",
       category: task.category ?? "", reminder: task.reminder ?? false,
-      recurrence: task.recurrence ?? "none",
+      location: task.location ?? null,
     });
     setDialogOpen(true);
   }
 
-  function scheduleNotification(title: string, dueDate: string, dueTime: string) {
-    if (!("Notification" in window)) return;
-    if (Notification.permission !== "granted") {
-      Notification.requestPermission().then((p) => {
-        if (p === "granted") setNotificationsEnabled(true);
-      });
-      return;
-    }
-    const dt = new Date(`${dueDate}T${dueTime}`);
-    const delay = dt.getTime() - Date.now();
-    if (delay > 0 && delay < 7 * 24 * 60 * 60 * 1000) { // within 7 days
-      setTimeout(() => {
-        new Notification(`⏰ Reminder: ${title}`, {
-          body: `This task is due now!`,
-          icon: "/icon",
-          badge: "/icon",
-        });
-      }, delay);
-    }
-  }
-
-  function handleSave() {
+  async function handleSave() {
     if (!form.title.trim()) return;
     const payload = {
       title: form.title, description: form.description, priority: form.priority,
+      recurrence: form.recurrence !== "none" ? form.recurrence : undefined,
       dueDate: form.dueDate || undefined, dueTime: form.dueTime || undefined,
       category: form.category || undefined, reminder: form.reminder,
-      recurrence: form.recurrence !== "none" ? form.recurrence : undefined,
+      location: form.location ?? undefined,
     };
-    if (editId) updateTask(editId, payload);
-    else addTask({ ...payload, status: "todo" });
-    // Schedule a local notification if reminder + time set
-    if (form.reminder && form.dueDate && form.dueTime) {
-      scheduleNotification(form.title, form.dueDate, form.dueTime);
+    if (editId) {
+      updateTask(editId, payload);
+    } else {
+      const task = addTask({ ...payload, status: "todo" });
+      if (form.reminder && form.dueDate && form.dueTime) {
+        if (!notificationsEnabled) await requestPermission();
+        scheduleReminder(task.title, task.dueDate!, task.dueTime!);
+      }
     }
     setDialogOpen(false);
   }
 
-  function toggleDone(task: Task) {
-    if (task.status === "done") updateTask(task.id, { status: "todo" });
-    else completeTask(task.id); // handles recurring spawn
+  async function handleLocationPick() {
+    const loc = await getLocation();
+    if (loc) setForm((f) => ({ ...f, location: loc }));
   }
 
   const stats = {
@@ -132,81 +113,83 @@ export default function TasksPage() {
     <div className="min-h-screen ambient-bg">
       <div className="px-4 pt-4 pb-nav sm:px-6 sm:pt-6 md:pb-6 space-y-5 page-enter">
         <PageHeader
-          title="Task Manager"
-          subtitle={`${stats.done}/${stats.total} completed · ${stats.today} due today`}
+          title="Tasks"
+          subtitle={`${stats.done}/${stats.total} done · ${stats.today} due today`}
           action={
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={toggleThoughtsPanel} className="gap-1.5 rounded-xl">
                 <Brain className="w-3.5 h-3.5" /> AI
               </Button>
               <Button onClick={openCreate} size="sm" className="gap-1.5 rounded-xl">
-                <Plus className="w-3.5 h-3.5" /> New task
+                <Plus className="w-3.5 h-3.5" /> New
               </Button>
             </div>
           }
         />
 
-        {/* Stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 stagger">
-          <StatCard label="Total"    value={stats.total}    icon={Circle}        iconColor="text-muted-foreground" />
-          <StatCard label="Done"     value={stats.done}     icon={CheckCircle2}  iconColor="text-green-400" />
-          <StatCard label="Today"    value={stats.today}    icon={Flame}         iconColor="text-orange-400" />
-          <StatCard label="Critical" value={stats.critical} icon={CheckCircle2}  iconColor="text-red-400" />
+        {/* Stats row */}
+        <div className="grid grid-cols-4 gap-2">
+          {[
+            { label: "Total",    value: stats.total,    color: "text-muted-foreground" },
+            { label: "Done",     value: stats.done,     color: "text-green-400"        },
+            { label: "Today",    value: stats.today,    color: "text-orange-400"       },
+            { label: "Critical", value: stats.critical, color: "text-red-400"          },
+          ].map(({ label, value, color }) => (
+            <div key={label} className="text-center p-3 rounded-2xl bg-card border border-border">
+              <p className={cn("text-xl font-bold", color)}>{value}</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">{label}</p>
+            </div>
+          ))}
         </div>
 
         {/* Filters */}
-        <div className="flex gap-3 flex-wrap">
-          <div className="relative flex-1 min-w-[180px]">
+        <div className="flex gap-2">
+          <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input placeholder="Search tasks…" className="pl-9 rounded-xl" value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
-          <Select value={filterPriority} onValueChange={(v) => setFilterPriority(v as Priority | "all")}>
-            <SelectTrigger className="w-[150px] rounded-xl gap-1.5">
-              <Filter className="w-3.5 h-3.5" />
-              <SelectValue placeholder="Priority" />
+          <Select value={filterPriority} onValueChange={(v) => setFilter(v as Priority | "all")}>
+            <SelectTrigger className="w-[130px] rounded-xl gap-1.5">
+              <Filter className="w-3.5 h-3.5" /><SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All priorities</SelectItem>
-              {PRIORITY_OPTIONS.map((p) => (
-                <SelectItem key={p} value={p} className="capitalize">{p}</SelectItem>
-              ))}
+              <SelectItem value="all">All</SelectItem>
+              {PRIORITY_OPTIONS.map((p) => <SelectItem key={p} value={p} className="capitalize">{p}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
 
         {/* Tabs */}
         <Tabs defaultValue="today">
-          <TabsList className="rounded-xl">
-            <TabsTrigger value="today" className="rounded-lg gap-1.5">
+          <TabsList className="rounded-xl w-full">
+            <TabsTrigger value="today" className="flex-1 rounded-lg gap-1.5">
               Today <span className="text-[10px] bg-orange-500/20 text-orange-400 rounded-md px-1.5">{todayTasks.length}</span>
             </TabsTrigger>
-            <TabsTrigger value="upcoming" className="rounded-lg gap-1.5">
+            <TabsTrigger value="upcoming" className="flex-1 rounded-lg gap-1.5">
               Upcoming <span className="text-[10px] bg-muted rounded-md px-1.5">{upcomingTasks.length}</span>
             </TabsTrigger>
-            <TabsTrigger value="done" className="rounded-lg gap-1.5">
+            <TabsTrigger value="done" className="flex-1 rounded-lg gap-1.5">
               Done <span className="text-[10px] bg-green-500/20 text-green-400 rounded-md px-1.5">{doneTasks.length}</span>
             </TabsTrigger>
           </TabsList>
 
           {[
             { value: "today",    list: todayTasks,    empty: "No tasks due today — enjoy your day!" },
-            { value: "upcoming", list: upcomingTasks, empty: "No upcoming tasks. Plan your week ahead." },
-            { value: "done",     list: doneTasks,     empty: "Nothing completed yet. Let's get going!" },
+            { value: "upcoming", list: upcomingTasks, empty: "No upcoming tasks. Plan ahead." },
+            { value: "done",     list: doneTasks,     empty: "Nothing completed yet. Let's go!" },
           ].map(({ value, list, empty }) => (
-            <TabsContent key={value} value={value} className="mt-4 space-y-2">
+            <TabsContent key={value} value={value} className="mt-3 space-y-2">
               {list.length === 0 ? (
                 <EmptyState icon={CheckCircle2} title={empty} className="py-12" />
-              ) : (
-                list.map((task) => (
-                  <TaskRow
-                    key={task.id}
-                    task={task}
-                    onToggle={() => toggleDone(task)}
-                    onEdit={() => openEdit(task)}
-                    onDelete={() => deleteTask(task.id)}
-                  />
-                ))
-              )}
+              ) : list.map((task) => (
+                <TaskRow
+                  key={task.id} task={task}
+                  onToggle={() => completeTask(task.id)}
+                  onEdit={() => openEdit(task)}
+                  onDelete={() => deleteTask(task.id)}
+                  onMapOpen={(loc) => openInMaps(loc)}
+                />
+              ))}
             </TabsContent>
           ))}
         </Tabs>
@@ -220,11 +203,13 @@ export default function TasksPage() {
             <div className="space-y-4">
               <div>
                 <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Title *</label>
-                <Input placeholder="What needs to be done?" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="rounded-xl" autoFocus />
+                <Input placeholder="What needs to be done?" value={form.title}
+                  onChange={(e) => setForm({ ...form, title: e.target.value })} className="rounded-xl" autoFocus />
               </div>
               <div>
                 <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Description</label>
-                <Textarea placeholder="Add more details…" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="resize-none h-20 rounded-xl" />
+                <Textarea placeholder="Add details…" value={form.description}
+                  onChange={(e) => setForm({ ...form, description: e.target.value })} className="resize-none h-20 rounded-xl" />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -237,8 +222,13 @@ export default function TasksPage() {
                   </Select>
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Category</label>
-                  <Input placeholder="Work, Personal…" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="rounded-xl" />
+                  <label className="text-xs font-medium text-muted-foreground mb-1.5 block flex items-center gap-1"><Repeat className="w-3 h-3" /> Repeat</label>
+                  <Select value={form.recurrence} onValueChange={(v) => setForm({ ...form, recurrence: v as Recurrence })}>
+                    <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {RECURRENCE_OPTIONS.map((r) => <SelectItem key={r} value={r} className="capitalize">{r === "none" ? "No repeat" : r}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -251,27 +241,40 @@ export default function TasksPage() {
                   <Input type="time" value={form.dueTime} onChange={(e) => setForm({ ...form, dueTime: e.target.value })} className="rounded-xl" />
                 </div>
               </div>
-            </div>
-              <div>
-                <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Repeat</label>
-                <Select value={form.recurrence} onValueChange={(v) => setForm({ ...form, recurrence: v as Recurrence })}>
-                  <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {RECURRENCE_OPTIONS.map((o) => (
-                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Category</label>
+                  <Input placeholder="Work, Personal…" value={form.category}
+                    onChange={(e) => setForm({ ...form, category: e.target.value })} className="rounded-xl" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1.5 block flex items-center gap-1"><MapPin className="w-3 h-3" /> Location</label>
+                  <Button
+                    type="button" variant="outline" size="sm" className="w-full rounded-xl gap-1.5 justify-start"
+                    onClick={handleLocationPick} disabled={geoLoading}
+                  >
+                    {geoLoading
+                      ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Getting…</>
+                      : form.location
+                        ? <><MapPin className="w-3.5 h-3.5 text-green-400" /> Location set</>
+                        : <><MapPin className="w-3.5 h-3.5" /> Add location</>
+                    }
+                  </Button>
+                </div>
               </div>
-              <label className="flex items-center gap-2 cursor-pointer text-sm">
-                <input
-                  type="checkbox"
-                  checked={form.reminder}
-                  onChange={(e) => setForm({ ...form, reminder: e.target.checked })}
-                  className="rounded"
-                />
-                Set reminder notification
+              {/* Reminder toggle */}
+              <label className="flex items-center gap-3 p-3 rounded-xl border border-border cursor-pointer hover:bg-muted/40 transition-colors">
+                <input type="checkbox" className="w-4 h-4 rounded accent-primary"
+                  checked={form.reminder} onChange={(e) => setForm({ ...form, reminder: e.target.checked })} />
+                <div className="flex items-center gap-2">
+                  {form.reminder ? <Bell className="w-4 h-4 text-primary" /> : <BellOff className="w-4 h-4 text-muted-foreground" />}
+                  <span className="text-sm font-medium">{form.reminder ? "Reminder on" : "Set reminder"}</span>
+                </div>
+                {form.reminder && !form.dueTime && (
+                  <span className="text-[10px] text-muted-foreground ml-auto">Set a due time too</span>
+                )}
               </label>
+            </div>
             <DialogFooter className="gap-2">
               <Button variant="outline" className="rounded-xl" onClick={() => setDialogOpen(false)}>Cancel</Button>
               <Button className="rounded-xl" onClick={handleSave} disabled={!form.title.trim()}>
@@ -285,37 +288,46 @@ export default function TasksPage() {
   );
 }
 
-function TaskRow({ task, onToggle, onEdit, onDelete }: {
-  task: Task; onToggle: () => void; onEdit: () => void; onDelete: () => void;
+function TaskRow({ task, onToggle, onEdit, onDelete, onMapOpen }: {
+  task: Task;
+  onToggle: () => void;
+  onEdit:   () => void;
+  onDelete: () => void;
+  onMapOpen: (loc: NonNullable<Task["location"]>) => void;
 }) {
-  const done = task.status === "done";
+  const done  = task.status === "done";
   const style = PRIORITY_STYLES[task.priority];
   return (
     <div className={cn(
-      "group flex items-start gap-3 px-4 py-3.5 rounded-xl border border-border bg-card hover:border-border/60 transition-all",
-      done && "opacity-50"
+      "group flex items-start gap-3 px-4 py-3.5 rounded-2xl border border-border bg-card transition-all",
+      done && "opacity-50",
     )}>
-      <button onClick={onToggle} className="mt-0.5 shrink-0 touch-target rounded-lg text-muted-foreground hover:text-primary transition-colors">
+      <button onClick={onToggle} className="mt-0.5 shrink-0 touch-target -ml-1 text-muted-foreground hover:text-primary transition-colors">
         {done ? <CheckCircle2 className="w-5 h-5 text-green-400" /> : <Circle className="w-5 h-5" />}
       </button>
       <div className="flex-1 min-w-0">
         <p className={cn("text-sm font-medium", done && "line-through text-muted-foreground")}>{task.title}</p>
         {task.description && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{task.description}</p>}
         <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-          <span className={cn("text-[10px] px-1.5 py-0.5 rounded-md border capitalize font-medium", style.badge)}>
-            {task.priority}
-          </span>
+          <span className={cn("text-[10px] px-1.5 py-0.5 rounded-md border capitalize font-medium", style.badge)}>{task.priority}</span>
           {task.dueDate && (
             <span className="text-[10px] text-muted-foreground flex items-center gap-1">
-              <Calendar className="w-2.5 h-2.5" />
-              {formatDate(task.dueDate)}{task.dueTime && ` · ${task.dueTime}`}
+              <Calendar className="w-2.5 h-2.5" /> {formatDate(task.dueDate)}{task.dueTime && ` · ${task.dueTime}`}
             </span>
           )}
-          {task.category && (
-            <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded-md">{task.category}</span>
-          )}
           {task.recurrence && task.recurrence !== "none" && (
-            <span className="text-[10px] text-blue-400 bg-blue-500/10 border border-blue-500/20 px-1.5 py-0.5 rounded-md capitalize">↺ {task.recurrence}</span>
+            <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+              <Repeat className="w-2.5 h-2.5" /> {task.recurrence}
+            </span>
+          )}
+          {task.reminder && <Bell className="w-3 h-3 text-muted-foreground" />}
+          {task.location && (
+            <button
+              onClick={() => onMapOpen(task.location!)}
+              className="text-[10px] text-green-400 flex items-center gap-1 hover:underline"
+            >
+              <MapPin className="w-2.5 h-2.5" /> Map
+            </button>
           )}
         </div>
       </div>
