@@ -1,5 +1,5 @@
 // ThoughtStack Service Worker
-const VERSION  = "thoughtstack-v8";
+const VERSION  = "thoughtstack-v9";
 const CACHE    = VERSION;
 
 // Pages to pre-cache on install so they work offline immediately
