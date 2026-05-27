@@ -9,9 +9,9 @@ import { ThoughtsPanel }                   from "./ThoughtsPanel";
 import { MainContentInner }                from "./MainContentInner";
 import { InstallPrompt }                   from "@/components/ui/install-prompt";
 import { OfflineBanner }                   from "@/components/ui/offline-banner";
+import { Onboarding }                      from "@/components/ui/onboarding";
 import { useAppStore }                     from "@/store/useAppStore";
 import { useOnlineStatus }                 from "@/hooks/useOnlineStatus";
-import { WifiOff }                         from "lucide-react";
 
 const PUBLIC_PATHS = ["/auth"];
 
@@ -83,6 +83,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <ThoughtsPanel />
       <InstallPrompt />
+      <Onboarding />
     </div>
   );
 }

@@ -1,165 +1,100 @@
 "use client";
 
 import { useState } from "react";
-import { Brain, CheckSquare, Sparkles, ArrowRight, Zap } from "lucide-react";
+import { Brain, CheckSquare, BookOpen, ArrowRight, Sparkles } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 const STEPS = [
   {
-    id: "welcome",
-    icon: Brain,
-    iconBg: "bg-foreground",
-    iconColor: "text-background",
+    icon: Brain, color: "bg-foreground", iconColor: "text-background",
     title: "Welcome to ThoughtStack",
-    subtitle: "Your AI-powered personal operating system for tasks, habits, learning, and more.",
+    subtitle: "Your AI-powered personal OS",
+    body: "Capture thoughts, manage tasks, journal your days — and let Thoughts AI connect it all for you.",
+    cta: "Get started",
   },
   {
-    id: "name",
-    icon: Sparkles,
-    iconBg: "bg-primary/10",
-    iconColor: "text-primary",
-    title: "What should I call you?",
-    subtitle: "Thoughts AI will use this to personalise your experience.",
+    icon: CheckSquare, color: "bg-blue-500/20", iconColor: "text-blue-400",
+    title: "Tasks that think with you",
+    subtitle: "Smart, context-aware task management",
+    body: "Just type what you need to do. Thoughts parses dates, times, and priorities automatically from plain English.",
+    cta: "Got it",
   },
   {
-    id: "task",
-    icon: CheckSquare,
-    iconBg: "bg-green-500/10",
-    iconColor: "text-green-400",
-    title: "Add your first task",
-    subtitle: "What's one thing you need to get done? Start small.",
-  },
-  {
-    id: "done",
-    icon: Zap,
-    iconBg: "bg-yellow-500/10",
-    iconColor: "text-yellow-400",
-    title: "You're all set! ⚡",
-    subtitle: "Thoughts AI knows your tasks, habits, and schedule. Just ask it anything.",
+    icon: BookOpen, color: "bg-green-500/20", iconColor: "text-green-400",
+    title: "Journal + AI insights",
+    subtitle: "Write freely, let AI extract the action",
+    body: "Write a journal entry and tap Save & Analyse. Thoughts reads it and surfaces hidden tasks and patterns.",
+    cta: "Open Thoughts AI",
   },
 ];
 
 export function Onboarding() {
-  const { onboarded, setOnboarded, updateProfile, addTask } = useAppStore();
-
-  const [step,     setStep]     = useState(0);
-  const [name,     setName]     = useState("");
-  const [taskText, setTaskText] = useState("");
+  const { onboarded, setOnboarded, toggleThoughtsPanel } = useAppStore();
+  const [step, setStep] = useState(0);
 
   if (onboarded) return null;
 
   const current = STEPS[step];
-  const Icon = current.icon;
-  const isLast = step === STEPS.length - 1;
+  const Icon    = current.icon;
+  const isLast  = step === STEPS.length - 1;
 
-  function handleNext() {
-    if (step === 1 && name.trim()) {
-      updateProfile({ name: name.trim() });
-    }
-    if (step === 2 && taskText.trim()) {
-      addTask({ title: taskText.trim(), priority: "medium", status: "todo", reminder: false });
-    }
+  function advance() {
     if (isLast) {
       setOnboarded();
+      setTimeout(() => toggleThoughtsPanel(), 400);
     } else {
       setStep((s) => s + 1);
     }
   }
 
-  const canProceed =
-    step === 0 ? true :
-    step === 1 ? name.trim().length > 0 :
-    step === 2 ? true : // task is optional
-    true;
-
   return (
-    <>
-      {/* Backdrop */}
-      <div className="fixed inset-0 z-[100] bg-background/80 backdrop-blur-md" />
+    <div className="fixed inset-0 z-[100] bg-background/95 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in">
+      <div className="w-full max-w-sm text-center space-y-8 animate-fade-up">
+        {/* Progress dots */}
+        <div className="flex items-center justify-center gap-2">
+          {STEPS.map((_, i) => (
+            <div
+              key={i}
+              className={cn(
+                "rounded-full transition-all duration-300",
+                i === step ? "w-6 h-2 bg-foreground" : "w-2 h-2 bg-muted-foreground/30",
+              )}
+            />
+          ))}
+        </div>
 
-      {/* Modal */}
-      <div className="fixed inset-0 z-[101] flex items-end sm:items-center justify-center p-4">
-        <div className={cn(
-          "w-full max-w-sm bg-background border border-border rounded-3xl shadow-2xl",
-          "flex flex-col overflow-hidden animate-scale-in"
-        )}>
-          {/* Progress dots */}
-          <div className="flex justify-center gap-1.5 pt-5">
-            {STEPS.map((_, i) => (
-              <div key={i} className={cn(
-                "h-1 rounded-full transition-all duration-300",
-                i === step ? "w-6 bg-foreground" : i < step ? "w-3 bg-foreground/40" : "w-3 bg-muted"
-              )} />
-            ))}
-          </div>
+        {/* Icon */}
+        <div className={cn("w-20 h-20 rounded-3xl flex items-center justify-center mx-auto shadow-lg", current.color)}>
+          <Icon className={cn("w-9 h-9", current.iconColor)} />
+        </div>
 
-          {/* Content */}
-          <div className="flex flex-col items-center text-center px-6 pt-6 pb-4 gap-4">
-            <div className={cn("w-16 h-16 rounded-2xl flex items-center justify-center", current.iconBg)}>
-              <Icon className={cn("w-8 h-8", current.iconColor)} />
-            </div>
-            <div>
-              <h2 className="text-xl font-bold tracking-tight">{current.title}</h2>
-              <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed max-w-[260px] mx-auto">
-                {current.subtitle}
-              </p>
-            </div>
+        {/* Copy */}
+        <div className="space-y-2">
+          <h1 className="text-2xl font-bold tracking-tight">{current.title}</h1>
+          <p className="text-sm font-medium text-primary">{current.subtitle}</p>
+          <p className="text-sm text-muted-foreground leading-relaxed max-w-[280px] mx-auto">{current.body}</p>
+        </div>
 
-            {/* Step-specific inputs */}
-            {step === 1 && (
-              <Input
-                placeholder="Your name…"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && canProceed && handleNext()}
-                className="rounded-xl text-center text-base"
-                autoFocus
-              />
-            )}
-
-            {step === 2 && (
-              <Input
-                placeholder="e.g. Review project proposal…"
-                value={taskText}
-                onChange={(e) => setTaskText(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleNext()}
-                className="rounded-xl text-sm"
-                autoFocus
-              />
-            )}
-
-            {step === 3 && (
-              <div className="w-full space-y-2 text-left bg-muted/40 rounded-2xl p-4">
-                <p className="text-xs font-semibold text-muted-foreground mb-3">What you can do:</p>
-                {[
-                  "💬 Ask Thoughts AI anything about your day",
-                  "✅ Track tasks with priorities and due dates",
-                  "🔥 Build habits with daily streaks",
-                  "📓 Journal with mood tracking",
-                  "⚡ Level up skills with missions",
-                ].map((item) => (
-                  <p key={item} className="text-xs text-foreground/80 leading-relaxed">{item}</p>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Footer */}
-          <div className="px-6 pb-safe pb-6 pt-2 flex flex-col gap-2">
-            <Button
-              onClick={handleNext}
-              disabled={!canProceed}
-              className="w-full rounded-xl h-12 text-sm font-semibold gap-2"
-            >
-              {isLast ? "Start using ThoughtStack" : step === 2 && !taskText.trim() ? "Skip for now" : "Continue"}
-              {!isLast && <ArrowRight className="w-4 h-4" />}
-            </Button>
-          </div>
+        {/* Actions */}
+        <div className="space-y-3">
+          <button
+            onClick={advance}
+            className="w-full flex items-center justify-center gap-2 py-3.5 px-6 bg-foreground text-background rounded-2xl font-semibold text-sm hover:opacity-90 active:scale-95 transition-all"
+          >
+            {isLast
+              ? <><Sparkles className="w-4 h-4" /> {current.cta}</>
+              : <>{current.cta} <ArrowRight className="w-4 h-4" /></>
+            }
+          </button>
+          <button
+            onClick={() => setOnboarded()}
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Skip intro
+          </button>
         </div>
       </div>
-    </>
+    </div>
   );
 }

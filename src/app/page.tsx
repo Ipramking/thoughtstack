@@ -4,7 +4,7 @@ import { useState, useMemo, useRef } from "react";
 import Link from "next/link";
 import {
   Sparkles, ArrowRight, Plus, CheckCircle2,
-  Circle, Flame, BookOpen, Calendar, Loader2, Brain,
+  Circle, Flame, BookOpen, Calendar, Loader2, Brain, Repeat,
 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { callThoughts } from "@/lib/thoughts-ai";
@@ -201,6 +201,11 @@ export default function HomePage() {
                   </button>
                   <div className={cn("w-2 h-2 rounded-full shrink-0", PRIORITY_DOT[task.priority])} />
                   <p className="flex-1 text-sm font-medium truncate">{task.title}</p>
+                  {task.recurrence && task.recurrence !== "none" && (
+                    <span className="text-[10px] text-muted-foreground/60 shrink-0 flex items-center gap-0.5">
+                      <Repeat className="w-2.5 h-2.5" />{task.recurrence}
+                    </span>
+                  )}
                   {task.dueTime && (
                     <span className="text-[11px] text-muted-foreground shrink-0">{task.dueTime}</span>
                   )}

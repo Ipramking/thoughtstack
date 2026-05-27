@@ -1,17 +1,16 @@
 "use client";
 
-import { useTheme } from "next-themes";
-import { Settings, Sun, Moon, Trash2, Brain, Shield, Check } from "lucide-react";
+import { useTheme }    from "next-themes";
+import { Sun, Moon, Trash2, Bell, BellOff, CheckCircle2, Check, FlaskConical } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { PageHeader } from "@/components/ui/page-header";
-import { cn } from "@/lib/utils";
-import { toast } from "@/hooks/useToast";
+import { Card, CardContent, CardHeader, CardDescription } from "@/components/ui/card";
+import { Button }      from "@/components/ui/button";
+import { PageHeader }  from "@/components/ui/page-header";
+import { cn }          from "@/lib/utils";
+import { toast }       from "@/hooks/useToast";
+import { useNotifications } from "@/hooks/useNotifications";
 
-function SettingRow({ label, description, action }: {
-  label: string; description?: string; action: React.ReactNode;
-}) {
+function Row({ label, description, action }: { label: string; description?: string; action: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-4 py-4 border-b border-border/60 last:border-0">
       <div className="min-w-0">
@@ -23,30 +22,22 @@ function SettingRow({ label, description, action }: {
   );
 }
 
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground/60 px-1 mb-1">
-      {children}
-    </p>
-  );
+function Section({ children }: { children: React.ReactNode }) {
+  return <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 px-1 mb-1">{children}</p>;
 }
 
 export default function SettingsPage() {
-  const { theme, setTheme } = useTheme();
-  const { tasks, journals, events } = useAppStore();
+  const { resolvedTheme, setTheme } = useTheme();
+  const { tasks, journals, events }  = useAppStore();
+  const { notificationsEnabled, requestPermission, sendTestNotification } = useNotifications();
 
   function clearData(type: "tasks" | "journals" | "events" | "all") {
     if (!confirm(`Clear ${type === "all" ? "ALL data" : type}? This cannot be undone.`)) return;
     const s = useAppStore.getState();
-    if (type === "tasks")    [...s.tasks].forEach((t) => s.deleteTask(t.id));
-    if (type === "journals") [...s.journals].forEach((j) => s.deleteJournal(j.id));
-    if (type === "events")   [...s.events].forEach((e) => s.deleteEvent(e.id));
-    if (type === "all") {
-      [...s.tasks].forEach((t) => s.deleteTask(t.id));
-      [...s.journals].forEach((j) => s.deleteJournal(j.id));
-      [...s.events].forEach((e) => s.deleteEvent(e.id));
-      s.clearMessages();
-    }
+    if (type === "tasks"    || type === "all") [...s.tasks].forEach((t) => s.deleteTask(t.id));
+    if (type === "journals" || type === "all") [...s.journals].forEach((j) => s.deleteJournal(j.id));
+    if (type === "events"   || type === "all") [...s.events].forEach((e) => s.deleteEvent(e.id));
+    if (type === "all") s.clearMessages();
     toast.success(`${type === "all" ? "All data" : type} cleared`);
   }
 
@@ -57,96 +48,122 @@ export default function SettingsPage() {
 
         {/* Appearance */}
         <div className="space-y-2">
-          <SectionLabel>Appearance</SectionLabel>
-          <Card>
-            <CardContent className="p-5">
-              <SettingRow
-                label="Theme"
-                description="Choose your preferred colour scheme"
-                action={
-                  <div className="flex gap-2">
-                    {[
-                      { value: "dark",  label: "Dark",  icon: Moon },
-                      { value: "light", label: "Light", icon: Sun  },
-                    ].map(({ value, label, icon: Icon }) => (
-                      <button
-                        key={value}
-                        onClick={() => setTheme(value)}
-                        className={cn(
-                          "flex items-center gap-2 px-3 py-2 rounded-xl border text-sm font-medium transition-all",
-                          theme === value
-                            ? "border-primary bg-primary/10 text-foreground"
-                            : "border-border hover:bg-muted text-muted-foreground"
-                        )}
-                      >
-                        <Icon className="w-3.5 h-3.5" />
-                        {label}
-                        {theme === value && <Check className="w-3 h-3 text-primary" />}
-                      </button>
-                    ))}
-                  </div>
-                }
-              />
-            </CardContent>
-          </Card>
+          <Section>Appearance</Section>
+          <Card><CardContent className="p-5">
+            <Row
+              label="Theme"
+              description="Choose your preferred colour scheme"
+              action={
+                <div className="flex gap-2">
+                  {[
+                    { value: "dark",  label: "Dark",  icon: Moon },
+                    { value: "light", label: "Light", icon: Sun  },
+                  ].map(({ value, label, icon: Icon }) => (
+                    <button
+                      key={value}
+                      onClick={() => setTheme(value)}
+                      className={cn(
+                        "flex items-center gap-2 px-3 py-2 rounded-xl border text-sm font-medium transition-all",
+                        resolvedTheme === value
+                          ? "border-primary bg-primary/10 text-foreground"
+                          : "border-border hover:bg-muted text-muted-foreground",
+                      )}
+                    >
+                      <Icon className="w-3.5 h-3.5" />
+                      {label}
+                      {resolvedTheme === value && <Check className="w-3 h-3 text-primary" />}
+                    </button>
+                  ))}
+                </div>
+              }
+            />
+          </CardContent></Card>
         </div>
 
-        {/* Thoughts AI */}
+        {/* Notifications */}
         <div className="space-y-2">
-          <SectionLabel>Thoughts AI</SectionLabel>
-          <Card>
-            <CardContent className="p-5 space-y-0 divide-y divide-border/60">
-              <SettingRow
-                label="Claude API"
-                description="Primary AI — set ANTHROPIC_API_KEY in Vercel"
-                action={
-                  <span className="text-xs font-medium text-muted-foreground bg-muted px-2.5 py-1 rounded-lg">
-                    .env.local
+          <Section>Notifications & Reminders</Section>
+          <Card><CardContent className="p-5 space-y-0 divide-y divide-border/60">
+            <Row
+              label="Push notifications"
+              description={notificationsEnabled
+                ? "Enabled — you'll get task reminders on this device"
+                : "Get notified about task due times, even when the app is closed"}
+              action={
+                notificationsEnabled ? (
+                  <span className="flex items-center gap-1.5 text-xs font-medium text-green-400 bg-green-500/10 px-2.5 py-1 rounded-lg border border-green-500/20">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Enabled
                   </span>
+                ) : (
+                  <Button
+                    size="sm"
+                    className="rounded-xl gap-1.5"
+                    onClick={async () => await requestPermission()}
+                  >
+                    <Bell className="w-3.5 h-3.5" /> Enable
+                  </Button>
+                )
+              }
+            />
+            {notificationsEnabled && (
+              <Row
+                label="Test notification"
+                description="Send a test push to verify it's working"
+                action={
+                  <Button variant="outline" size="sm" className="rounded-xl gap-1.5" onClick={sendTestNotification}>
+                    <FlaskConical className="w-3.5 h-3.5" /> Send test
+                  </Button>
                 }
               />
-              <SettingRow
-                label="Gemini API"
-                description="Fallback when Claude is unavailable"
-                action={
-                  <span className="text-xs font-medium text-muted-foreground bg-muted px-2.5 py-1 rounded-lg">
-                    .env.local
-                  </span>
-                }
-              />
-              <SettingRow
-                label="Rule-based engine"
-                description="Always active — works offline, no API key needed"
-                action={
-                  <span className="text-xs font-medium text-green-400 bg-green-500/10 px-2.5 py-1 rounded-lg border border-green-500/20">
-                    Active
-                  </span>
-                }
-              />
-              <div className="pt-4">
-                <Button variant="outline" size="sm" className="rounded-xl gap-1.5"
-                  onClick={() => { useAppStore.getState().clearMessages(); toast.info("Chat history cleared"); }}>
-                  <Trash2 className="w-3.5 h-3.5" /> Clear chat history
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+            )}
+            <Row
+              label="Task reminders"
+              description="Reminders fire at the task's due time (requires notifications enabled)"
+              action={
+                <span className={cn(
+                  "text-xs font-medium px-2.5 py-1 rounded-lg border",
+                  notificationsEnabled
+                    ? "text-green-400 bg-green-500/10 border-green-500/20"
+                    : "text-muted-foreground bg-muted border-border",
+                )}>
+                  {notificationsEnabled ? "Active" : "Off"}
+                </span>
+              }
+            />
+          </CardContent></Card>
+        </div>
+
+        {/* AI */}
+        <div className="space-y-2">
+          <Section>Thoughts AI</Section>
+          <Card><CardContent className="p-5 space-y-0 divide-y divide-border/60">
+            <Row label="Claude API" description="Primary AI — set ANTHROPIC_API_KEY in Vercel"
+              action={<span className="text-xs text-muted-foreground bg-muted px-2.5 py-1 rounded-lg">Env var</span>} />
+            <Row label="Gemini API" description="Fallback when Claude is unavailable"
+              action={<span className="text-xs text-muted-foreground bg-muted px-2.5 py-1 rounded-lg">Env var</span>} />
+            <Row label="Local engine" description="Always active — context-aware, works offline"
+              action={<span className="text-xs text-green-400 bg-green-500/10 px-2.5 py-1 rounded-lg border border-green-500/20">Always on</span>} />
+            <div className="pt-4">
+              <Button variant="outline" size="sm" className="rounded-xl gap-1.5"
+                onClick={() => { useAppStore.getState().clearMessages(); toast.info("Chat history cleared"); }}>
+                <Trash2 className="w-3.5 h-3.5" /> Clear chat history
+              </Button>
+            </div>
+          </CardContent></Card>
         </div>
 
         {/* Data */}
         <div className="space-y-2">
-          <SectionLabel>Data Management</SectionLabel>
+          <Section>Data Management</Section>
           <Card>
-            <CardHeader className="pb-2">
-              <CardDescription>All data is stored locally in your browser. Clearing is permanent.</CardDescription>
-            </CardHeader>
+            <CardHeader className="pb-2"><CardDescription>All data is stored locally in your browser. Clearing is permanent.</CardDescription></CardHeader>
             <CardContent className="p-5 pt-0 space-y-0 divide-y divide-border/60">
               {[
                 { type: "tasks"    as const, label: "Tasks",           count: tasks.length    },
                 { type: "journals" as const, label: "Journal entries", count: journals.length  },
                 { type: "events"   as const, label: "Calendar events", count: events.length    },
               ].map(({ type, label, count }) => (
-                <SettingRow key={type} label={label} description={`${count} ${count === 1 ? "item" : "items"} stored`}
+                <Row key={type} label={label} description={`${count} ${count === 1 ? "item" : "items"} stored`}
                   action={
                     <Button variant="ghost" size="sm" className="rounded-xl text-destructive hover:text-destructive hover:bg-destructive/10 gap-1.5"
                       onClick={() => clearData(type)} disabled={count === 0}>
@@ -164,7 +181,6 @@ export default function SettingsPage() {
           </Card>
         </div>
 
-        {/* About */}
         <div className="text-center py-4 text-xs text-muted-foreground space-y-1">
           <p className="font-semibold text-foreground">ThoughtStack</p>
           <p>AI-powered personal OS · Next.js · Supabase · Claude + Gemini</p>
