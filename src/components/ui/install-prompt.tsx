@@ -70,7 +70,7 @@ export function InstallPrompt() {
         {/* Header */}
         <div className="flex items-center gap-3 p-4 border-b border-border">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/icon-192.png" alt="ThoughtStack" className="w-10 h-10 rounded-xl" />
+          <img src="/icon-192" alt="ThoughtStack" className="w-10 h-10 rounded-xl" />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-bold">Install ThoughtStack</p>
             <p className="text-xs text-muted-foreground">Add to your home screen</p>

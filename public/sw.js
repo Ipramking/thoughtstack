@@ -1,12 +1,12 @@
 // ThoughtStack Service Worker
-const VERSION  = "thoughtstack-v7";
+const VERSION  = "thoughtstack-v8";
 const CACHE    = VERSION;
 
 // Pages to pre-cache on install so they work offline immediately
 const PRECACHE = [
   "/", "/tasks", "/journal", "/calendar",
   "/profile", "/settings", "/offline",
-  "/icon-192.png", "/icon-512.png", "/manifest.json",
+  "/icon-192", "/icon", "/manifest.json",
 ];
 
 // Scheduled reminders (in-memory — survive SW lifecycle for active sessions)
