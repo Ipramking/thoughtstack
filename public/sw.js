@@ -1,12 +1,18 @@
 // ThoughtStack Service Worker
-const VERSION   = "thoughtstack-v6";
-const CACHE     = VERSION;
-const PRECACHE  = ["/", "/tasks", "/journal", "/calendar", "/offline"];
+const VERSION  = "thoughtstack-v7";
+const CACHE    = VERSION;
 
-// Scheduled reminders (stored in memory — survive SW lifecycle via IndexedDB in prod)
-const reminders = new Map(); // id → { title, body, url, timerId }
+// Pages to pre-cache on install so they work offline immediately
+const PRECACHE = [
+  "/", "/tasks", "/journal", "/calendar",
+  "/profile", "/settings", "/offline",
+  "/icon-192.png", "/icon-512.png", "/manifest.json",
+];
 
-// ── Install ───────────────────────────────────────────────────────────────────
+// Scheduled reminders (in-memory — survive SW lifecycle for active sessions)
+const reminders = new Map();
+
+// ── Install — pre-cache shell ──────────────────────────────────────────────────
 self.addEventListener("install", (e) => {
   e.waitUntil(
     caches.open(CACHE)
@@ -15,7 +21,7 @@ self.addEventListener("install", (e) => {
   );
 });
 
-// ── Activate ──────────────────────────────────────────────────────────────────
+// ── Activate — clear old caches ───────────────────────────────────────────────
 self.addEventListener("activate", (e) => {
   e.waitUntil(
     caches.keys()
@@ -23,21 +29,24 @@ self.addEventListener("activate", (e) => {
       .then(() => self.clients.claim())
       .then(() =>
         self.clients.matchAll({ includeUncontrolled: true, type: "window" })
-          .then((clients) => clients.forEach((c) => c.postMessage({ type: "SW_UPDATED", version: VERSION })))
+          .then((clients) =>
+            clients.forEach((c) => c.postMessage({ type: "SW_UPDATED", version: VERSION }))
+          )
       )
   );
 });
 
-// ── Fetch — network-first for pages, cache-first for Next.js chunks ───────────
+// ── Fetch strategy ────────────────────────────────────────────────────────────
 self.addEventListener("fetch", (e) => {
   const { request } = e;
   const url = new URL(request.url);
 
+  // Only handle GET, same-origin
   if (request.method !== "GET") return;
   if (url.origin !== self.location.origin) return;
-  if (url.pathname.startsWith("/api/")) return;
 
-  if (url.pathname.startsWith("/_next/")) {
+  // ── Next.js static chunks — cache-first (content-hashed, safe forever)
+  if (url.pathname.startsWith("/_next/static/")) {
     e.respondWith(
       caches.open(CACHE).then(async (cache) => {
         const cached = await cache.match(request);
@@ -50,6 +59,52 @@ self.addEventListener("fetch", (e) => {
     return;
   }
 
+  // ── Auth session — network-first, cache fallback (enables offline auth check)
+  if (url.pathname === "/api/auth/session") {
+    e.respondWith(
+      fetch(request)
+        .then((res) => {
+          if (res.ok) {
+            const clone = res.clone();
+            caches.open(CACHE).then((c) => c.put(request, clone));
+          }
+          return res;
+        })
+        .catch(async () => {
+          const cached = await caches.match(request);
+          // Return cached session or empty session object so app doesn't crash
+          return cached ?? new Response(JSON.stringify(null), {
+            headers: { "Content-Type": "application/json" },
+          });
+        })
+    );
+    return;
+  }
+
+  // ── Other API routes — network only (no offline fallback needed)
+  if (url.pathname.startsWith("/api/")) return;
+
+  // ── Static assets (icons, manifest, fonts)
+  if (
+    url.pathname.endsWith(".png") ||
+    url.pathname.endsWith(".jpg") ||
+    url.pathname.endsWith(".svg") ||
+    url.pathname.endsWith(".ico") ||
+    url.pathname === "/manifest.json"
+  ) {
+    e.respondWith(
+      caches.open(CACHE).then(async (cache) => {
+        const cached = await cache.match(request);
+        if (cached) return cached;
+        const fresh = await fetch(request).catch(() => null);
+        if (fresh?.ok) cache.put(request, fresh.clone());
+        return fresh ?? new Response("Not found", { status: 404 });
+      })
+    );
+    return;
+  }
+
+  // ── App pages — network-first, fall back to cache, then offline page
   e.respondWith(
     fetch(request)
       .then((res) => {
@@ -61,12 +116,16 @@ self.addEventListener("fetch", (e) => {
       })
       .catch(async () => {
         const cached = await caches.match(request);
-        return cached ?? caches.match("/offline");
+        if (cached) return cached;
+        // Try to serve the root page (app shell) for navigation requests
+        const root = await caches.match("/");
+        if (root) return root;
+        return caches.match("/offline");
       })
   );
 });
 
-// ── Push — show notification when server pushes ───────────────────────────────
+// ── Push notifications ────────────────────────────────────────────────────────
 self.addEventListener("push", (e) => {
   if (!e.data) return;
   let data = {};
@@ -77,13 +136,13 @@ self.addEventListener("push", (e) => {
   e.waitUntil(
     self.registration.showNotification(title, {
       body,
-      icon:    "/icon",
-      badge:   "/icon",
+      icon:    "/icon-192.png",
+      badge:   "/icon-192.png",
       vibrate: [100, 50, 100],
       data:    { url },
       actions: [
-        { action: "open",    title: "Open app" },
-        { action: "dismiss", title: "Dismiss"  },
+        { action: "open",    title: "Open"    },
+        { action: "dismiss", title: "Dismiss" },
       ],
     })
   );
@@ -94,45 +153,33 @@ self.addEventListener("notificationclick", (e) => {
   e.notification.close();
   if (e.action === "dismiss") return;
 
-  const targetUrl = e.notification.data?.url ?? "/";
+  const target = e.notification.data?.url ?? "/";
   e.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
       const existing = clients.find((c) => c.url.includes(self.location.origin));
-      if (existing) {
-        existing.focus();
-        existing.navigate(targetUrl);
-      } else {
-        self.clients.openWindow(targetUrl);
-      }
+      if (existing) { existing.focus(); existing.navigate(target); }
+      else self.clients.openWindow(target);
     })
   );
 });
 
-// ── Messages from the main thread ─────────────────────────────────────────────
+// ── Messages from app ─────────────────────────────────────────────────────────
 self.addEventListener("message", (e) => {
   const { type, payload } = e.data ?? {};
 
-  if (type === "SKIP_WAITING") {
-    self.skipWaiting();
-    return;
-  }
+  if (type === "SKIP_WAITING") { self.skipWaiting(); return; }
 
-  // Schedule a local reminder alarm
   if (type === "SCHEDULE_REMINDER") {
     const { id, title, body, dueAt, url } = payload;
     const delay = dueAt - Date.now();
     if (delay <= 0) return;
-
-    // Clear any existing timer for this reminder
-    if (reminders.has(id)) {
-      clearTimeout(reminders.get(id).timerId);
-    }
+    if (reminders.has(id)) clearTimeout(reminders.get(id).timerId);
 
     const timerId = setTimeout(() => {
       self.registration.showNotification(title ?? "Reminder", {
         body:    body ?? "Your task is due now!",
-        icon:    "/icon",
-        badge:   "/icon",
+        icon:    "/icon-192.png",
+        badge:   "/icon-192.png",
         vibrate: [200, 100, 200],
         data:    { url: url ?? "/tasks" },
         actions: [{ action: "open", title: "View task" }],
@@ -146,9 +193,6 @@ self.addEventListener("message", (e) => {
 
   if (type === "CANCEL_REMINDER") {
     const { id } = payload ?? {};
-    if (reminders.has(id)) {
-      clearTimeout(reminders.get(id).timerId);
-      reminders.delete(id);
-    }
+    if (reminders.has(id)) { clearTimeout(reminders.get(id).timerId); reminders.delete(id); }
   }
 });
