@@ -1,11 +1,5 @@
 {
   "buildCommand": "npm run build",
   "installCommand": "npm install --legacy-peer-deps",
-  "framework": "nextjs",
-  "crons": [
-    {
-      "path": "/api/keepalive",
-      "schedule": "0 9 * * *"
-    }
-  ]
+  "framework": "nextjs"
 }
