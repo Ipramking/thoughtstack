@@ -114,8 +114,11 @@ export const useAppStore = create<AppState>()(
         if (typeof navigator !== "undefined" && "vibrate" in navigator) navigator.vibrate(50);
         if (task.recurrence && task.recurrence !== "none") {
           const next = nextDueDate(task);
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          if (next) { const { id: _id, createdAt: _c, updatedAt: _u, ...rest } = task; addTask({ ...rest, status: "todo", dueDate: next, parentId: task.parentId ?? task.id }); }
+          if (next) {
+            const rest = { ...task } as Partial<Task>;
+            delete rest.id; delete rest.createdAt; delete rest.updatedAt;
+            addTask({ ...(rest as Omit<Task, "id" | "createdAt" | "updatedAt">), status: "todo", dueDate: next, parentId: task.parentId ?? task.id });
+          }
         }
       },
       addSubtask: (taskId, title) =>

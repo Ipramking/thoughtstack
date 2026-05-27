@@ -48,24 +48,29 @@ export function useSyncData() {
           events:   SyncRow<CalendarEvent>[];
         };
 
+        // Strip id from a row.data so it can be passed to add*()
+        const stripId = <T extends { id?: string }>(d: T) => {
+          const r: Partial<T> = { ...d }; delete r.id; return r as Omit<T, "id">;
+        };
+
         // Merge tasks
         const localTaskIds = new Set(tasks.map((t) => t.id));
         for (const row of remote.tasks) {
-          if (!localTaskIds.has(row.id)) { const { id: _id, ...rest } = row.data; addTask(rest); }
+          if (!localTaskIds.has(row.id)) addTask(stripId(row.data) as Omit<Task, "id" | "createdAt" | "updatedAt">);
           else { const local = tasks.find((t) => t.id === row.id)!; if (newer(local, row.updated_at)) updateTask(row.id, row.data); }
         }
 
         // Merge journals
         const localJIds = new Set(journals.map((j) => j.id));
         for (const row of remote.journals) {
-          if (!localJIds.has(row.id)) { const { id: _id, ...rest } = row.data; addJournal(rest); }
+          if (!localJIds.has(row.id)) addJournal(stripId(row.data) as Omit<JournalEntry, "id" | "createdAt" | "updatedAt">);
           else { const local = journals.find((j) => j.id === row.id)!; if (newer(local, row.updated_at)) updateJournal(row.id, row.data); }
         }
 
         // Merge events
         const localEIds = new Set(events.map((e) => e.id));
         for (const row of remote.events) {
-          if (!localEIds.has(row.id)) { const { id: _id, ...rest } = row.data; addEvent(rest); }
+          if (!localEIds.has(row.id)) addEvent(stripId(row.data) as Omit<CalendarEvent, "id" | "createdAt">);
           else { const local = events.find((e) => e.id === row.id)!; if (newer(local, row.updated_at)) updateEvent(row.id, row.data); }
         }
 
