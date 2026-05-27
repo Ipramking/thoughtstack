@@ -1,7 +1,7 @@
 "use client";
 
 import { useTheme }    from "next-themes";
-import { Sun, Moon, Trash2, Bell, BellOff, CheckCircle2, Check, FlaskConical } from "lucide-react";
+import { Sun, Moon, Trash2, Bell, CheckCircle2, Check, FlaskConical, Download, Upload } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { Card, CardContent, CardHeader, CardDescription } from "@/components/ui/card";
 import { Button }      from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { PageHeader }  from "@/components/ui/page-header";
 import { cn }          from "@/lib/utils";
 import { toast }       from "@/hooks/useToast";
 import { useNotifications } from "@/hooks/useNotifications";
+import { useRef }      from "react";
 
 function Row({ label, description, action }: { label: string; description?: string; action: React.ReactNode }) {
   return (
@@ -30,6 +31,41 @@ export default function SettingsPage() {
   const { resolvedTheme, setTheme } = useTheme();
   const { tasks, journals, events }  = useAppStore();
   const { notificationsEnabled, requestPermission, sendTestNotification } = useNotifications();
+  const restoreRef = useRef<HTMLInputElement>(null);
+
+  function handleBackup() {
+    const state = useAppStore.getState();
+    const data  = { tasks: state.tasks, journals: state.journals, events: state.events, profile: state.profile, exportedAt: new Date().toISOString() };
+    const blob  = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url   = URL.createObjectURL(blob);
+    const a     = document.createElement("a");
+    a.href      = url;
+    a.download  = `thoughtstack-backup-${new Date().toISOString().split("T")[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success("Backup downloaded");
+  }
+
+  function handleRestore(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(reader.result as string);
+        const state = useAppStore.getState();
+        if (data.tasks)    data.tasks.forEach((t: Parameters<typeof state.addTask>[0]) => state.addTask(t));
+        if (data.journals) data.journals.forEach((j: Parameters<typeof state.addJournal>[0]) => state.addJournal(j));
+        if (data.events)   data.events.forEach((ev: Parameters<typeof state.addEvent>[0]) => state.addEvent(ev));
+        if (data.profile)  state.updateProfile(data.profile);
+        toast.success("Data restored successfully");
+      } catch {
+        toast.error("Invalid backup file");
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  }
 
   function clearData(type: "tasks" | "journals" | "events" | "all") {
     if (!confirm(`Clear ${type === "all" ? "ALL data" : type}? This cannot be undone.`)) return;
@@ -179,6 +215,34 @@ export default function SettingsPage() {
               </div>
             </CardContent>
           </Card>
+        </div>
+
+        {/* Backup & Restore */}
+        <div className="space-y-2">
+          <Section>Backup &amp; Restore</Section>
+          <Card><CardContent className="p-5 space-y-0 divide-y divide-border/60">
+            <Row
+              label="Download backup"
+              description="Save all your tasks, journals, and events as a JSON file"
+              action={
+                <Button variant="outline" size="sm" className="rounded-xl gap-1.5" onClick={handleBackup}>
+                  <Download className="w-3.5 h-3.5" /> Backup
+                </Button>
+              }
+            />
+            <Row
+              label="Restore from backup"
+              description="Import a previously downloaded backup file"
+              action={
+                <>
+                  <input ref={restoreRef} type="file" accept=".json" className="hidden" onChange={handleRestore} />
+                  <Button variant="outline" size="sm" className="rounded-xl gap-1.5" onClick={() => restoreRef.current?.click()}>
+                    <Upload className="w-3.5 h-3.5" /> Restore
+                  </Button>
+                </>
+              }
+            />
+          </CardContent></Card>
         </div>
 
         <div className="text-center py-4 text-xs text-muted-foreground space-y-1">

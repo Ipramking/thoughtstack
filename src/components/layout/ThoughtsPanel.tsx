@@ -55,6 +55,7 @@ export function ThoughtsPanel() {
         tasksTotal:   tasks.length,
         tasksDone:    tasks.filter((t) => t.status === "done").length,
         journalCount: journals.length,
+        streak:       useAppStore.getState().getStreak(),
       },
     };
   }, [tasks, events, journals]);

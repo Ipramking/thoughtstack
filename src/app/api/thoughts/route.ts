@@ -60,7 +60,7 @@ function buildSystemPrompt(context?: ThoughtsContext): string {
   }
 
   parts.push(
-    `Stats: ${context.stats.tasksDone}/${context.stats.tasksTotal} tasks done, ${context.stats.journalCount} journal entries`
+    `Stats: ${context.stats.tasksDone}/${context.stats.tasksTotal} tasks done · ${context.stats.journalCount} journal entries · ${context.stats.streak} day streak`
   );
 
   return parts.join("\n");

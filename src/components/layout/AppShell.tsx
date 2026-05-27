@@ -12,6 +12,7 @@ import { OfflineBanner }                   from "@/components/ui/offline-banner"
 import { Onboarding }                      from "@/components/ui/onboarding";
 import { useAppStore }                     from "@/store/useAppStore";
 import { useOnlineStatus }                 from "@/hooks/useOnlineStatus";
+import { useSyncData }                     from "@/hooks/useSyncData";
 
 const PUBLIC_PATHS = ["/auth"];
 
@@ -21,6 +22,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const router     = useRouter();
   const isOnline   = useOnlineStatus();
   const { updateProfile, profile } = useAppStore();
+  useSyncData(); // cross-device sync — pull on mount, push on focus/interval
 
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const isPublic = PUBLIC_PATHS.includes(pathname);

@@ -60,7 +60,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className={`${inter.variable} font-sans antialiased`}>
         <SessionWrapper>
-          <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
+          <ThemeProvider attribute="class" defaultTheme="system" enableSystem={true}>
             <AppShell>{children}</AppShell>
             <Toaster />
             <ServiceWorkerRegister />

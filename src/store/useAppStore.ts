@@ -4,40 +4,56 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import {
   Task, JournalEntry, CalendarEvent,
-  ThoughtsMessage, UserProfile, DailyStats, Recurrence,
+  ThoughtsMessage, UserProfile, DailyStats, Recurrence, Subtask,
 } from "@/types";
 import { generateId } from "@/lib/utils";
-import { format, addDays, addWeeks, addMonths } from "date-fns";
+import { format, addDays, addWeeks, addMonths, subDays } from "date-fns";
 
-// ── helpers ────────────────────────────────────────────────────────────────────
-const now = () => new Date().toISOString();
+const now   = () => new Date().toISOString();
+const today = () => format(new Date(), "yyyy-MM-dd");
 
 function nextDueDate(task: Task): string | undefined {
   if (!task.dueDate || !task.recurrence || task.recurrence === "none") return undefined;
   const base = new Date(task.dueDate);
   switch (task.recurrence as Recurrence) {
-    case "daily":    return format(addDays(base, 1),  "yyyy-MM-dd");
+    case "daily":    return format(addDays(base, 1), "yyyy-MM-dd");
     case "weekdays": {
       let next = addDays(base, 1);
       while ([0, 6].includes(next.getDay())) next = addDays(next, 1);
       return format(next, "yyyy-MM-dd");
     }
-    case "weekly":   return format(addWeeks(base, 1),  "yyyy-MM-dd");
-    case "monthly":  return format(addMonths(base, 1), "yyyy-MM-dd");
-    default:         return undefined;
+    case "weekly":  return format(addWeeks(base, 1),  "yyyy-MM-dd");
+    case "monthly": return format(addMonths(base, 1), "yyyy-MM-dd");
+    default:        return undefined;
   }
 }
 
-// ── types ─────────────────────────────────────────────────────────────────────
+/** Count consecutive days (going back from today) where something was done */
+function calcStreak(tasks: Task[], journals: JournalEntry[]): number {
+  let streak = 0;
+  const d = new Date();
+  for (let i = 0; i < 365; i++) {
+    const dateStr = format(subDays(d, i), "yyyy-MM-dd");
+    const hadTask    = tasks.some((t) => t.status === "done" && t.updatedAt?.startsWith(dateStr));
+    const hadJournal = journals.some((j) => j.createdAt?.startsWith(dateStr));
+    if (hadTask || hadJournal) streak++;
+    else if (i > 0) break; // gap — streak ends
+  }
+  return streak;
+}
+
 interface AppState {
   profile: UserProfile;
   updateProfile: (u: Partial<UserProfile>) => void;
 
   tasks: Task[];
-  addTask:      (t: Omit<Task, "id" | "createdAt" | "updatedAt">) => Task;
-  updateTask:   (id: string, u: Partial<Task>) => void;
-  deleteTask:   (id: string) => void;
-  completeTask: (id: string) => void;   // marks done + spawns next recurring
+  addTask:        (t: Omit<Task, "id" | "createdAt" | "updatedAt">) => Task;
+  updateTask:     (id: string, u: Partial<Task>) => void;
+  deleteTask:     (id: string) => void;
+  completeTask:   (id: string) => void;
+  addSubtask:     (taskId: string, title: string) => void;
+  toggleSubtask:  (taskId: string, subtaskId: string) => void;
+  deleteSubtask:  (taskId: string, subtaskId: string) => void;
 
   journals: JournalEntry[];
   addJournal:    (e: Omit<JournalEntry, "id" | "createdAt" | "updatedAt">) => JournalEntry;
@@ -56,11 +72,11 @@ interface AppState {
   dailyStats: DailyStats[];
   recordDailyStat: (s: Partial<DailyStats> & { date: string }) => void;
 
-  // Push
-  pushSubscription: string | null;   // JSON.stringify(PushSubscription)
+  getStreak: () => number;
+
+  pushSubscription: string | null;
   setPushSubscription: (s: string | null) => void;
 
-  // UI
   sidebarCollapsed:      boolean;
   toggleSidebar:         () => void;
   thoughtsPanelOpen:     boolean;
@@ -75,7 +91,7 @@ export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
       // ── Profile ──────────────────────────────────────────────────────────
-      profile: { name: "User", email: "", bio: "", joinedAt: now() },
+      profile: { name: "", email: "", bio: "", joinedAt: now() },
       updateProfile: (u) => set((s) => ({ profile: { ...s.profile, ...u } })),
 
       // ── Tasks ────────────────────────────────────────────────────────────
@@ -86,43 +102,46 @@ export const useAppStore = create<AppState>()(
         return t;
       },
       updateTask: (id, u) =>
-        set((s) => ({
-          tasks: s.tasks.map((t) => t.id === id ? { ...t, ...u, updatedAt: now() } : t),
-        })),
+        set((s) => ({ tasks: s.tasks.map((t) => t.id === id ? { ...t, ...u, updatedAt: now() } : t) })),
       deleteTask: (id) => set((s) => ({ tasks: s.tasks.filter((t) => t.id !== id) })),
       completeTask: (id) => {
         const { tasks, addTask } = get();
         const task = tasks.find((t) => t.id === id);
         if (!task) return;
         set((s) => ({
-          tasks: s.tasks.map((t) =>
-            t.id === id ? { ...t, status: "done" as const, updatedAt: now() } : t
-          ),
+          tasks: s.tasks.map((t) => t.id === id ? { ...t, status: "done" as const, updatedAt: now() } : t),
         }));
-        // Haptic feedback
-        if (typeof navigator !== "undefined" && "vibrate" in navigator) {
-          navigator.vibrate(50);
-        }
-        // Spawn next recurring instance
+        if (typeof navigator !== "undefined" && "vibrate" in navigator) navigator.vibrate(50);
         if (task.recurrence && task.recurrence !== "none") {
           const next = nextDueDate(task);
-          if (next) {
-            addTask({
-              title: task.title,
-              description: task.description,
-              priority: task.priority,
-              status: "todo",
-              dueDate: next,
-              dueTime: task.dueTime,
-              category: task.category,
-              reminder: task.reminder,
-              recurrence: task.recurrence,
-              location: task.location,
-              parentId: task.parentId ?? task.id,
-            });
-          }
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          if (next) { const { id: _id, createdAt: _c, updatedAt: _u, ...rest } = task; addTask({ ...rest, status: "todo", dueDate: next, parentId: task.parentId ?? task.id }); }
         }
       },
+      addSubtask: (taskId, title) =>
+        set((s) => ({
+          tasks: s.tasks.map((t) => t.id === taskId ? {
+            ...t,
+            subtasks: [...(t.subtasks ?? []), { id: generateId(), title, done: false }],
+            updatedAt: now(),
+          } : t),
+        })),
+      toggleSubtask: (taskId, subtaskId) =>
+        set((s) => ({
+          tasks: s.tasks.map((t) => t.id === taskId ? {
+            ...t,
+            subtasks: (t.subtasks ?? []).map((st) => st.id === subtaskId ? { ...st, done: !st.done } : st),
+            updatedAt: now(),
+          } : t),
+        })),
+      deleteSubtask: (taskId, subtaskId) =>
+        set((s) => ({
+          tasks: s.tasks.map((t) => t.id === taskId ? {
+            ...t,
+            subtasks: (t.subtasks ?? []).filter((st) => st.id !== subtaskId),
+            updatedAt: now(),
+          } : t),
+        })),
 
       // ── Journal ──────────────────────────────────────────────────────────
       journals: [],
@@ -132,9 +151,7 @@ export const useAppStore = create<AppState>()(
         return e;
       },
       updateJournal: (id, u) =>
-        set((s) => ({
-          journals: s.journals.map((j) => j.id === id ? { ...j, ...u, updatedAt: now() } : j),
-        })),
+        set((s) => ({ journals: s.journals.map((j) => j.id === id ? { ...j, ...u, updatedAt: now() } : j) })),
       deleteJournal: (id) => set((s) => ({ journals: s.journals.filter((j) => j.id !== id) })),
 
       // ── Calendar ─────────────────────────────────────────────────────────
@@ -151,9 +168,7 @@ export const useAppStore = create<AppState>()(
       // ── Thoughts AI ──────────────────────────────────────────────────────
       messages: [],
       addMessage: (m) =>
-        set((s) => ({
-          messages: [...s.messages, { ...m, id: generateId(), timestamp: now() }],
-        })),
+        set((s) => ({ messages: [...s.messages, { ...m, id: generateId(), timestamp: now() }] })),
       clearMessages: () => set({ messages: [] }),
 
       // ── Analytics ────────────────────────────────────────────────────────
@@ -165,6 +180,8 @@ export const useAppStore = create<AppState>()(
             ? { dailyStats: s.dailyStats.map((d) => d.date === stat.date ? { ...d, ...stat } : d) }
             : { dailyStats: [...s.dailyStats, { tasksCompleted: 0, tasksCreated: 0, journalEntries: 0, ...stat }] };
         }),
+
+      getStreak: () => calcStreak(get().tasks, get().journals),
 
       // ── Push ─────────────────────────────────────────────────────────────
       pushSubscription: null,
@@ -183,16 +200,10 @@ export const useAppStore = create<AppState>()(
     {
       name: "thoughtstack-storage",
       partialize: (s) => ({
-        profile:             s.profile,
-        tasks:               s.tasks,
-        journals:            s.journals,
-        events:              s.events,
-        messages:            s.messages,
-        dailyStats:          s.dailyStats,
-        pushSubscription:    s.pushSubscription,
-        sidebarCollapsed:    s.sidebarCollapsed,
-        onboarded:           s.onboarded,
-        notificationsEnabled: s.notificationsEnabled,
+        profile: s.profile, tasks: s.tasks, journals: s.journals,
+        events: s.events, messages: s.messages, dailyStats: s.dailyStats,
+        pushSubscription: s.pushSubscription, sidebarCollapsed: s.sidebarCollapsed,
+        onboarded: s.onboarded, notificationsEnabled: s.notificationsEnabled,
       }),
     }
   )

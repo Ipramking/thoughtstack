@@ -12,6 +12,12 @@ export type Priority   = "low" | "medium" | "high" | "critical";
 export type TaskStatus = "todo" | "in_progress" | "done";
 export type Recurrence = "none" | "daily" | "weekdays" | "weekly" | "monthly";
 
+export interface Subtask {
+  id: string;
+  title: string;
+  done: boolean;
+}
+
 export interface Task {
   id: string;
   title: string;
@@ -25,6 +31,7 @@ export interface Task {
   recurrence?: Recurrence;
   parentId?: string;   // recurring instances link back to origin
   location?: Location;
+  subtasks?: Subtask[];
   createdAt: string;
   updatedAt: string;
 }
@@ -87,7 +94,7 @@ export interface ThoughtsContext {
   todayTasks:     Array<{ title: string; priority: string; status: string; dueTime?: string }>;
   todayEvents:    Array<{ title: string; startTime?: string; type: string }>;
   recentJournals: Array<{ title: string; mood?: string; date: string }>;
-  stats:          { tasksTotal: number; tasksDone: number; journalCount: number };
+  stats:          { tasksTotal: number; tasksDone: number; journalCount: number; streak: number };
 }
 
 // ─── User / Profile ───────────────────────────────────────────────────────────

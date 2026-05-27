@@ -4,7 +4,7 @@ import { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import {
   Plus, Search, BookOpen, Edit2, Trash2, Tag, Brain,
   Camera, Sparkles, Loader2, Mic, MicOff, Square,
-  Bold, Italic, List, Heading2, Minus, Image as ImageIcon, X,
+  Bold, Italic, List, Heading2, Minus, X, LayoutTemplate, ChevronDown,
 } from "lucide-react";
 import { useAppStore }     from "@/store/useAppStore";
 import { JournalEntry, Mood } from "@/types";
@@ -16,6 +16,30 @@ import { EmptyState }      from "@/components/ui/empty-state";
 import { cn, formatDate }  from "@/lib/utils";
 import { toast }           from "@/hooks/useToast";
 import { callThoughts }    from "@/lib/thoughts-ai";
+
+// ── Journal templates ─────────────────────────────────────────────────────────
+const TEMPLATES = [
+  {
+    label: "Daily check-in",
+    title: `Daily check-in — ${new Date().toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}`,
+    content: `## How I'm feeling\n\n\n## What I accomplished today\n- \n\n## What's on my mind\n\n\n## Tomorrow's intention\n`,
+  },
+  {
+    label: "Weekly review",
+    title: `Weekly review — W${Math.ceil(new Date().getDate() / 7)} ${new Date().toLocaleDateString("en-US", { month: "short", year: "numeric" })}`,
+    content: `## Wins this week\n- \n\n## What didn't go well\n- \n\n## What I learned\n\n\n## Goals for next week\n1. \n2. \n3. \n`,
+  },
+  {
+    label: "Gratitude",
+    title: `Gratitude — ${new Date().toLocaleDateString("en-US", { month: "long", day: "numeric" })}`,
+    content: `## Three things I'm grateful for\n1. \n2. \n3. \n\n## One person I appreciate today\n\n\n## Something small that made me smile\n`,
+  },
+  {
+    label: "Brain dump",
+    title: "Brain dump",
+    content: `## Everything on my mind right now\n\n\n## Tasks hiding in the above\n- \n\n## How I feel after writing this\n`,
+  },
+];
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 const MOODS: { value: Mood; emoji: string; label: string }[] = [
@@ -157,7 +181,8 @@ export default function JournalPage() {
   const [editId,     setEditId]     = useState<string | null>(null);
   const [form,       setForm]       = useState<FormData>(DEFAULT_FORM);
   const [analyzing,  setAnalyzing]  = useState(false);
-  const [preview,    setPreview]    = useState(false); // markdown preview toggle
+  const [preview,    setPreview]    = useState(false);
+  const [showTpls,   setShowTpls]   = useState(false);
 
   const textareaRef  = useRef<HTMLTextAreaElement>(null);
   const cameraRef    = useRef<HTMLInputElement>(null);
@@ -322,9 +347,37 @@ export default function JournalPage() {
         <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) closeDialog(); }}>
           <DialogContent className="max-w-2xl rounded-2xl max-h-[92dvh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <BookOpen className="w-4 h-4" />
-                {editId ? "Edit entry" : "New journal entry"}
+              <DialogTitle className="flex items-center justify-between gap-2">
+                <span className="flex items-center gap-2">
+                  <BookOpen className="w-4 h-4" />
+                  {editId ? "Edit entry" : "New journal entry"}
+                </span>
+                {!editId && (
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowTpls((v) => !v)}
+                      className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors px-2.5 py-1.5 rounded-xl border border-border hover:bg-muted"
+                    >
+                      <LayoutTemplate className="w-3.5 h-3.5" /> Templates <ChevronDown className="w-3 h-3" />
+                    </button>
+                    {showTpls && (
+                      <div className="absolute right-0 top-full mt-1 z-50 w-44 bg-card border border-border rounded-xl shadow-xl overflow-hidden">
+                        {TEMPLATES.map((tpl) => (
+                          <button
+                            key={tpl.label}
+                            onClick={() => {
+                              setForm((f) => ({ ...f, title: tpl.title, content: tpl.content }));
+                              setShowTpls(false);
+                            }}
+                            className="w-full text-left px-3 py-2.5 text-xs hover:bg-muted transition-colors border-b border-border/50 last:border-0"
+                          >
+                            {tpl.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </DialogTitle>
             </DialogHeader>
 

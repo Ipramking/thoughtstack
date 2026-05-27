@@ -19,8 +19,9 @@ import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { cn, isToday, formatDate } from "@/lib/utils";
 import { useNotifications } from "@/hooks/useNotifications";
-import { useGeolocation } from "@/hooks/useGeolocation";
-import { toast } from "@/hooks/useToast";
+import { useGeolocation }   from "@/hooks/useGeolocation";
+import { useSwipe }         from "@/hooks/useSwipe";
+import { toast }            from "@/hooks/useToast";
 
 const PRIORITY_OPTIONS: Priority[]       = ["low", "medium", "high", "critical"];
 const RECURRENCE_OPTIONS: Recurrence[]   = ["none", "daily", "weekdays", "weekly", "monthly"];
@@ -43,7 +44,7 @@ const DEFAULT_FORM: TaskFormData = {
 };
 
 export default function TasksPage() {
-  const { tasks, addTask, updateTask, deleteTask, completeTask, toggleThoughtsPanel } = useAppStore();
+  const { tasks, addTask, updateTask, deleteTask, completeTask, addSubtask, toggleSubtask, deleteSubtask, toggleThoughtsPanel } = useAppStore();
   const { notificationsEnabled, requestPermission, scheduleReminder } = useNotifications();
   const { loading: geoLoading, getLocation, openInMaps } = useGeolocation();
 
@@ -188,6 +189,9 @@ export default function TasksPage() {
                   onEdit={() => openEdit(task)}
                   onDelete={() => deleteTask(task.id)}
                   onMapOpen={(loc) => openInMaps(loc)}
+                  onAddSubtask={(title) => addSubtask(task.id, title)}
+                  onToggleSubtask={(stId) => toggleSubtask(task.id, stId)}
+                  onDeleteSubtask={(stId) => deleteSubtask(task.id, stId)}
                 />
               ))}
             </TabsContent>
@@ -288,53 +292,107 @@ export default function TasksPage() {
   );
 }
 
-function TaskRow({ task, onToggle, onEdit, onDelete, onMapOpen }: {
+function TaskRow({ task, onToggle, onEdit, onDelete, onMapOpen, onAddSubtask, onToggleSubtask, onDeleteSubtask }: {
   task: Task;
-  onToggle: () => void;
-  onEdit:   () => void;
-  onDelete: () => void;
+  onToggle: () => void; onEdit: () => void; onDelete: () => void;
   onMapOpen: (loc: NonNullable<Task["location"]>) => void;
+  onAddSubtask: (title: string) => void;
+  onToggleSubtask: (id: string) => void;
+  onDeleteSubtask: (id: string) => void;
 }) {
   const done  = task.status === "done";
   const style = PRIORITY_STYLES[task.priority];
+  const [showSubs, setShowSubs] = useState(false);
+  const [newSub,   setNewSub]   = useState("");
+
+  const swipe = useSwipe({
+    onSwipeRight: () => { if (!done) onToggle(); },
+    onSwipeLeft:  () => onDelete(),
+  });
+
+  const doneSubtasks = (task.subtasks ?? []).filter((s) => s.done).length;
+  const totalSubs    = (task.subtasks ?? []).length;
+
   return (
-    <div className={cn(
-      "group flex items-start gap-3 px-4 py-3.5 rounded-2xl border border-border bg-card transition-all",
-      done && "opacity-50",
-    )}>
-      <button onClick={onToggle} className="mt-0.5 shrink-0 touch-target -ml-1 text-muted-foreground hover:text-primary transition-colors">
-        {done ? <CheckCircle2 className="w-5 h-5 text-green-400" /> : <Circle className="w-5 h-5" />}
-      </button>
-      <div className="flex-1 min-w-0">
-        <p className={cn("text-sm font-medium", done && "line-through text-muted-foreground")}>{task.title}</p>
-        {task.description && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{task.description}</p>}
-        <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-          <span className={cn("text-[10px] px-1.5 py-0.5 rounded-md border capitalize font-medium", style.badge)}>{task.priority}</span>
-          {task.dueDate && (
-            <span className="text-[10px] text-muted-foreground flex items-center gap-1">
-              <Calendar className="w-2.5 h-2.5" /> {formatDate(task.dueDate)}{task.dueTime && ` · ${task.dueTime}`}
-            </span>
-          )}
-          {task.recurrence && task.recurrence !== "none" && (
-            <span className="text-[10px] text-muted-foreground flex items-center gap-1">
-              <Repeat className="w-2.5 h-2.5" /> {task.recurrence}
-            </span>
-          )}
-          {task.reminder && <Bell className="w-3 h-3 text-muted-foreground" />}
-          {task.location && (
-            <button
-              onClick={() => onMapOpen(task.location!)}
-              className="text-[10px] text-green-400 flex items-center gap-1 hover:underline"
-            >
-              <MapPin className="w-2.5 h-2.5" /> Map
-            </button>
-          )}
+    <div
+      {...swipe}
+      className={cn(
+        "group rounded-2xl border border-border bg-card transition-all overflow-hidden select-none",
+        done && "opacity-55",
+      )}
+    >
+      {/* Main row */}
+      <div className="flex items-start gap-3 px-4 py-3.5">
+        <button onClick={onToggle} className="mt-0.5 shrink-0 touch-target -ml-1 text-muted-foreground hover:text-primary transition-colors">
+          {done ? <CheckCircle2 className="w-5 h-5 text-green-400" /> : <Circle className="w-5 h-5" />}
+        </button>
+        <div className="flex-1 min-w-0">
+          <p className={cn("text-sm font-medium", done && "line-through text-muted-foreground")}>{task.title}</p>
+          {task.description && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{task.description}</p>}
+          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+            <span className={cn("text-[10px] px-1.5 py-0.5 rounded-md border capitalize font-medium", style.badge)}>{task.priority}</span>
+            {task.dueDate && (
+              <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                <Calendar className="w-2.5 h-2.5" /> {formatDate(task.dueDate)}{task.dueTime && ` · ${task.dueTime}`}
+              </span>
+            )}
+            {task.recurrence && task.recurrence !== "none" && (
+              <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                <Repeat className="w-2.5 h-2.5" /> {task.recurrence}
+              </span>
+            )}
+            {task.reminder && <Bell className="w-3 h-3 text-muted-foreground" />}
+            {task.location && (
+              <button onClick={() => onMapOpen(task.location!)} className="text-[10px] text-green-400 flex items-center gap-1 hover:underline">
+                <MapPin className="w-2.5 h-2.5" /> Map
+              </button>
+            )}
+            {totalSubs > 0 && (
+              <button onClick={() => setShowSubs((v) => !v)} className="text-[10px] text-muted-foreground flex items-center gap-1 hover:text-foreground transition-colors">
+                <CheckCircle2 className="w-2.5 h-2.5" /> {doneSubtasks}/{totalSubs}
+              </button>
+            )}
+          </div>
+        </div>
+        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={() => setShowSubs((v) => !v)} title="Subtasks">
+            <Plus className="w-3.5 h-3.5" />
+          </Button>
+          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={onEdit}><Edit2 className="w-3.5 h-3.5" /></Button>
+          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-destructive hover:text-destructive" onClick={onDelete}><Trash2 className="w-3.5 h-3.5" /></Button>
         </div>
       </div>
-      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-        <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={onEdit}><Edit2 className="w-3.5 h-3.5" /></Button>
-        <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-destructive hover:text-destructive" onClick={onDelete}><Trash2 className="w-3.5 h-3.5" /></Button>
-      </div>
+
+      {/* Subtasks */}
+      {showSubs && (
+        <div className="border-t border-border/60 px-4 py-3 space-y-2 bg-muted/20">
+          {(task.subtasks ?? []).map((st) => (
+            <div key={st.id} className="flex items-center gap-2 group/st">
+              <button onClick={() => onToggleSubtask(st.id)} className="shrink-0 text-muted-foreground hover:text-primary transition-colors">
+                {st.done ? <CheckCircle2 className="w-4 h-4 text-green-400" /> : <Circle className="w-4 h-4" />}
+              </button>
+              <span className={cn("flex-1 text-xs", st.done && "line-through text-muted-foreground")}>{st.title}</span>
+              <button onClick={() => onDeleteSubtask(st.id)} className="opacity-0 group-hover/st:opacity-100 text-muted-foreground hover:text-destructive transition-all">
+                <Trash2 className="w-3 h-3" />
+              </button>
+            </div>
+          ))}
+          <div className="flex items-center gap-2 mt-2">
+            <input
+              value={newSub}
+              onChange={(e) => setNewSub(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && newSub.trim()) {
+                  onAddSubtask(newSub.trim());
+                  setNewSub("");
+                }
+              }}
+              placeholder="Add a step… (Enter to save)"
+              className="flex-1 text-xs bg-transparent border-b border-border/60 pb-1 focus:outline-none focus:border-primary placeholder:text-muted-foreground/50 transition-colors"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

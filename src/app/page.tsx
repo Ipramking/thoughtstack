@@ -4,7 +4,7 @@ import { useState, useMemo, useRef } from "react";
 import Link from "next/link";
 import {
   Sparkles, ArrowRight, Plus, CheckCircle2,
-  Circle, Flame, BookOpen, Calendar, Loader2, Brain, Repeat,
+  Circle, Flame, BookOpen, Calendar, Loader2, Brain, Repeat, Zap,
 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { callThoughts } from "@/lib/thoughts-ai";
@@ -32,7 +32,7 @@ const GREET = () => {
 };
 
 export default function HomePage() {
-  const { tasks, journals, events, profile, addTask, addEvent, completeTask, toggleThoughtsPanel } = useAppStore();
+  const { tasks, journals, events, profile, addTask, addEvent, completeTask, toggleThoughtsPanel, getStreak } = useAppStore();
 
   const [capture, setCapture]   = useState("");
   const [aiLoading, setAiLoad]  = useState(false);
@@ -43,14 +43,15 @@ export default function HomePage() {
   const todayTasks  = useMemo(() => tasks.filter((t) => t.status !== "done" && (!t.dueDate || isToday(t.dueDate))), [tasks]);
   const todayEvents = useMemo(() => events.filter((e) => e.date === todayStr).sort((a, b) => (a.startTime ?? "").localeCompare(b.startTime ?? "")), [events, todayStr]);
   const recentEntry = journals[0];
-  const firstName   = profile.name.split(" ")[0] || "there";
+  const firstName   = profile.name?.split(" ")[0] || "there";
+  const streak      = getStreak();
 
   const context = useMemo((): ThoughtsContext => ({
     todayTasks: todayTasks.slice(0, 8).map((t) => ({ title: t.title, priority: t.priority, status: t.status, dueTime: t.dueTime })),
     todayEvents: todayEvents.slice(0, 5).map((e) => ({ title: e.title, startTime: e.startTime, type: e.type })),
     recentJournals: journals.slice(0, 3).map((j) => ({ title: j.title, mood: j.mood, date: j.createdAt.split("T")[0] })),
-    stats: { tasksTotal: tasks.length, tasksDone: tasks.filter((t) => t.status === "done").length, journalCount: journals.length },
-  }), [todayTasks, todayEvents, journals, tasks]);
+    stats: { tasksTotal: tasks.length, tasksDone: tasks.filter((t) => t.status === "done").length, journalCount: journals.length, streak },
+  }), [todayTasks, todayEvents, journals, tasks, streak]);
 
   async function handleCapture() {
     const text = capture.trim();
@@ -98,12 +99,20 @@ export default function HomePage() {
               {GREET()}, {firstName} 👋
             </h1>
           </div>
-          <button
-            onClick={toggleThoughtsPanel}
-            className="w-10 h-10 rounded-2xl bg-foreground flex items-center justify-center shrink-0 shadow-sm hover:opacity-90 transition-opacity active:scale-95"
-          >
-            <Brain className="w-5 h-5 text-background" />
-          </button>
+          <div className="flex items-center gap-2">
+            {streak > 0 && (
+              <div className="flex items-center gap-1 px-2.5 py-1.5 bg-orange-500/10 border border-orange-500/20 rounded-xl">
+                <Zap className="w-3.5 h-3.5 text-orange-400" />
+                <span className="text-xs font-bold text-orange-400">{streak}d</span>
+              </div>
+            )}
+            <button
+              onClick={toggleThoughtsPanel}
+              className="w-10 h-10 rounded-2xl bg-foreground flex items-center justify-center shrink-0 shadow-sm hover:opacity-90 transition-opacity active:scale-95"
+            >
+              <Brain className="w-5 h-5 text-background" />
+            </button>
+          </div>
         </div>
 
         {/* ── Quick Capture ── */}
