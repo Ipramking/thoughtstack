@@ -39,7 +39,8 @@ export function ServiceWorkerRegister() {
               newWorker.state === "installed" &&
               navigator.serviceWorker.controller
             ) {
-              // New version ready — toast only, reload handled by controllerchange
+              // New version ready — skip waiting so controllerchange fires
+              newWorker.postMessage({ type: "SKIP_WAITING" });
               toast.info("App updated — reloading…");
             }
           });

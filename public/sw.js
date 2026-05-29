@@ -1,9 +1,10 @@
-// ThoughtStack Service Worker — v10
+// ThoughtStack Service Worker — v11
 // Strategy: never cache HTML (always fresh), cache-first for hashed static
 // assets, network-first for auth session.  This prevents the "stale HTML
 // referencing dead chunk hash" problem that breaks every deploy.
+// v11: filter chrome-extension + data: schemes before any URL parsing
 
-const VERSION = "thoughtstack-v10";
+const VERSION = "thoughtstack-v11";
 const CACHE   = VERSION;
 
 // Static-only precache — no HTML, no API

@@ -92,7 +92,7 @@ export default function TasksPage() {
       const task = addTask({ ...payload, status: "todo" });
       if (form.reminder && form.dueDate && form.dueTime) {
         if (!notificationsEnabled) await requestPermission();
-        scheduleReminder(task.title, task.dueDate!, task.dueTime!);
+        scheduleReminder(task.id, task.title, task.dueDate!, task.dueTime);
       }
     }
     setDialogOpen(false);

@@ -33,11 +33,11 @@ export const metadata: Metadata = {
   },
   icons: {
     icon:     [
-      { url: "/icon-192", sizes: "192x192", type: "image/png" },
-      { url: "/icon",     sizes: "512x512", type: "image/png" },
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
     ],
-    apple:    [{ url: "/icon-192", sizes: "192x192", type: "image/png" }],
-    shortcut: "/icon-192",
+    apple:    [{ url: "/icon-192.png", sizes: "192x192", type: "image/png" }],
+    shortcut: "/icon-192.png",
   },
   other: {
     // iOS-specific meta tags
@@ -56,7 +56,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" suppressHydrationWarning>
       <head>
         {/* Splash screens / touch startup image (iOS) */}
-        <link rel="apple-touch-startup-image" href="/icon" />
+        <link rel="apple-touch-startup-image" href="/icon-512.png" />
+        <link rel="apple-touch-icon" href="/icon-192.png" />
       </head>
       <body className={`${inter.variable} font-sans antialiased`}>
         <SessionWrapper>

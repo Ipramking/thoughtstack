@@ -30,7 +30,7 @@ function Section({ children }: { children: React.ReactNode }) {
 export default function SettingsPage() {
   const { resolvedTheme, setTheme } = useTheme();
   const { tasks, journals, events }  = useAppStore();
-  const { notificationsEnabled, requestPermission, sendTestNotification } = useNotifications();
+  const { notificationsEnabled, requestPermission, disableNotifications, sendTestNotification } = useNotifications();
   const restoreRef = useRef<HTMLInputElement>(null);
 
   function handleBackup() {
@@ -127,9 +127,14 @@ export default function SettingsPage() {
                 : "Get notified about task due times, even when the app is closed"}
               action={
                 notificationsEnabled ? (
-                  <span className="flex items-center gap-1.5 text-xs font-medium text-green-400 bg-green-500/10 px-2.5 py-1 rounded-lg border border-green-500/20">
-                    <CheckCircle2 className="w-3.5 h-3.5" /> Enabled
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="flex items-center gap-1.5 text-xs font-medium text-green-400 bg-green-500/10 px-2.5 py-1 rounded-lg border border-green-500/20">
+                      <CheckCircle2 className="w-3.5 h-3.5" /> Enabled
+                    </span>
+                    <Button variant="ghost" size="sm" className="rounded-xl text-xs h-7 px-2 text-muted-foreground" onClick={disableNotifications}>
+                      Turn off
+                    </Button>
+                  </div>
                 ) : (
                   <Button
                     size="sm"
