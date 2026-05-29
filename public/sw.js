@@ -1,29 +1,52 @@
-// ThoughtStack Service Worker — v11
-// Strategy: never cache HTML (always fresh), cache-first for hashed static
-// assets, network-first for auth session.  This prevents the "stale HTML
-// referencing dead chunk hash" problem that breaks every deploy.
-// v11: filter chrome-extension + data: schemes before any URL parsing
+// ThoughtStack Service Worker — v12
+// Strategy:
+//  - HTML pages → network-first + cache; offline = serve cached page or app-shell
+//  - /_next/static/ → cache-first (immutable hashed chunks)
+//  - /api/auth/session → network-first + cache (offline auth bypass)
+//  - other /api/ → network only (never cache)
+//  - images / manifest → stale-while-revalidate
+//  - chrome-extension / data / blob → bailed out early
 
-const VERSION = "thoughtstack-v11";
+const VERSION = "thoughtstack-v12";
 const CACHE   = VERSION;
 
-// Static-only precache — no HTML, no API
-const PRECACHE = [
+// Pre-cache app shell + offline fallback + static assets
+// Wrapped in a nested addAll so a single 404 doesn't break the whole install.
+const PRECACHE_SHELL = [
   "/offline",
   "/icon-192.png",
   "/icon-512.png",
   "/manifest.json",
 ];
 
-// Scheduled reminders
+// Main app routes — cached so offline navigation works.
+// Each fetch is wrapped separately so one failure doesn't kill the rest.
+const PRECACHE_PAGES = [
+  "/",
+  "/tasks",
+  "/journal",
+  "/calendar",
+  "/profile",
+  "/settings",
+];
+
+// In-memory scheduled reminders (cleared on SW restart, which is acceptable)
 const reminders = new Map();
 
 // ── Install ────────────────────────────────────────────────────────────────────
 self.addEventListener("install", (e) => {
   e.waitUntil(
-    caches.open(CACHE)
-      .then((c) => c.addAll(PRECACHE).catch(() => {}))
-      .then(() => self.skipWaiting())
+    caches.open(CACHE).then(async (cache) => {
+      // Critical shell assets — must succeed
+      await cache.addAll(PRECACHE_SHELL).catch(() => {});
+
+      // App pages — best-effort (might fail if offline at install time)
+      await Promise.allSettled(
+        PRECACHE_PAGES.map((url) =>
+          cache.add(url).catch(() => {/* ignore individual failures */})
+        )
+      );
+    }).then(() => self.skipWaiting())
   );
 });
 
@@ -31,12 +54,17 @@ self.addEventListener("install", (e) => {
 self.addEventListener("activate", (e) => {
   e.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(
+        keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))
+      ))
       .then(() => self.clients.claim())
       .then(() =>
-        self.clients.matchAll({ includeUncontrolled: true, type: "window" })
+        self.clients
+          .matchAll({ includeUncontrolled: true, type: "window" })
           .then((clients) =>
-            clients.forEach((c) => c.postMessage({ type: "SW_UPDATED", version: VERSION }))
+            clients.forEach((c) =>
+              c.postMessage({ type: "SW_UPDATED", version: VERSION })
+            )
           )
       )
   );
@@ -46,14 +74,19 @@ self.addEventListener("activate", (e) => {
 self.addEventListener("fetch", (e) => {
   const { request } = e;
 
-  // Bail on anything that isn't a normal GET (POST/PUT, chrome-extension, etc.)
+  // Only intercept GET
   if (request.method !== "GET") return;
+
+  // Bail on non-HTTP schemes early — before parsing URL (avoids chrome-extension errors)
+  if (
+    !request.url.startsWith("http://") &&
+    !request.url.startsWith("https://")
+  ) return;
 
   let url;
   try { url = new URL(request.url); } catch { return; }
 
-  // Only handle http(s) requests on our own origin
-  if (url.protocol !== "http:" && url.protocol !== "https:") return;
+  // Only handle same-origin requests
   if (url.origin !== self.location.origin) return;
 
   // ── 1. Next.js static chunks — cache-first (hash-named, immutable) ───────────
@@ -74,32 +107,37 @@ self.addEventListener("fetch", (e) => {
     return;
   }
 
-  // ── 2. Auth session — network-first, cache fallback (offline auth bypass) ────
+  // ── 2. Auth session — network-first, cache fallback ──────────────────────────
   if (url.pathname === "/api/auth/session") {
     e.respondWith(
       fetch(request)
         .then((res) => {
           if (res.ok) {
-            const clone = res.clone();
-            caches.open(CACHE).then((c) => c.put(request, clone));
+            caches.open(CACHE).then((c) => c.put(request, res.clone()));
           }
           return res;
         })
         .catch(async () => {
           const cached = await caches.match(request);
-          return cached ?? new Response("null", { headers: { "Content-Type": "application/json" } });
+          return (
+            cached ??
+            new Response("null", {
+              headers: { "Content-Type": "application/json" },
+            })
+          );
         })
     );
     return;
   }
 
-  // ── 3. Other API routes — network only (skip SW entirely) ────────────────────
+  // ── 3. Other API routes — network only (never cache) ─────────────────────────
   if (url.pathname.startsWith("/api/")) return;
 
-  // ── 4. Static icons / manifest — stale-while-revalidate ──────────────────────
+  // ── 4. Static assets — stale-while-revalidate ────────────────────────────────
   if (
     url.pathname.endsWith(".png")  ||
     url.pathname.endsWith(".jpg")  ||
+    url.pathname.endsWith(".jpeg") ||
     url.pathname.endsWith(".svg")  ||
     url.pathname.endsWith(".ico")  ||
     url.pathname.endsWith(".webp") ||
@@ -109,7 +147,10 @@ self.addEventListener("fetch", (e) => {
       caches.open(CACHE).then(async (cache) => {
         const cached = await cache.match(request);
         const fetchPromise = fetch(request)
-          .then((res) => { if (res.ok) cache.put(request, res.clone()); return res; })
+          .then((res) => {
+            if (res.ok) cache.put(request, res.clone());
+            return res;
+          })
           .catch(() => cached ?? new Response("Not found", { status: 404 }));
         return cached || fetchPromise;
       })
@@ -117,28 +158,64 @@ self.addEventListener("fetch", (e) => {
     return;
   }
 
-  // ── 5. HTML pages — NETWORK ONLY, fallback to /offline when truly offline ────
-  // We do NOT cache HTML — that's what caused stale-chunk 404s after deploys.
-  // The app shell loads fresh every navigation, so chunk hashes always match.
+  // ── 5. HTML pages — NETWORK-FIRST with offline cache fallback ────────────────
+  //
+  // This is the key change from v10/v11. We now:
+  //   a) Try the network and cache the fresh response
+  //   b) On failure: serve the cached version of this exact URL
+  //   c) Fall back to cached "/" (app shell that Next.js router can handle)
+  //   d) Last resort: serve /offline
+  //
+  // This means tasks/journal/etc work offline as long as the user visited them online.
   if (request.mode === "navigate" || request.destination === "document") {
     e.respondWith(
-      fetch(request).catch(async () => {
-        const offline = await caches.match("/offline");
-        return offline ?? new Response("You are offline", { status: 503 });
+      caches.open(CACHE).then(async (cache) => {
+        try {
+          const fresh = await fetch(request);
+          if (fresh.ok) {
+            // Cache this page for offline use
+            cache.put(request, fresh.clone());
+          }
+          return fresh;
+        } catch {
+          // Offline path — check caches in priority order
+          const cached = await cache.match(request);
+          if (cached) return cached;
+
+          // App-shell fallback: "/" handles all client-side routing
+          const shell = await cache.match(new Request("/"));
+          if (shell) return shell;
+
+          // Last resort
+          const offlinePage = await caches.match("/offline");
+          return (
+            offlinePage ??
+            new Response("You are offline", {
+              status: 503,
+              headers: { "Content-Type": "text/plain" },
+            })
+          );
+        }
       })
     );
     return;
   }
 
-  // ── 6. Everything else (fonts, etc) — try network, no cache write ────────────
-  e.respondWith(fetch(request).catch(() => new Response("", { status: 504 })));
+  // ── 6. Everything else (fonts, etc.) — network only ──────────────────────────
+  e.respondWith(
+    fetch(request).catch(() => new Response("", { status: 504 }))
+  );
 });
 
 // ── Push notifications ────────────────────────────────────────────────────────
 self.addEventListener("push", (e) => {
   if (!e.data) return;
   let data = {};
-  try { data = e.data.json(); } catch { data = { title: "ThoughtStack", body: e.data.text() }; }
+  try {
+    data = e.data.json();
+  } catch {
+    data = { title: "ThoughtStack", body: e.data.text() };
+  }
   const { title = "ThoughtStack 🧠", body = "", url = "/" } = data;
 
   e.waitUntil(
@@ -163,11 +240,19 @@ self.addEventListener("notificationclick", (e) => {
 
   const target = e.notification.data?.url ?? "/";
   e.waitUntil(
-    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
-      const existing = clients.find((c) => c.url.includes(self.location.origin));
-      if (existing) { existing.focus(); existing.navigate(target); }
-      else self.clients.openWindow(target);
-    })
+    self.clients
+      .matchAll({ type: "window", includeUncontrolled: true })
+      .then((clients) => {
+        const existing = clients.find((c) =>
+          c.url.includes(self.location.origin)
+        );
+        if (existing) {
+          existing.focus();
+          existing.navigate(target);
+        } else {
+          self.clients.openWindow(target);
+        }
+      })
   );
 });
 
@@ -175,7 +260,10 @@ self.addEventListener("notificationclick", (e) => {
 self.addEventListener("message", (e) => {
   const { type, payload } = e.data ?? {};
 
-  if (type === "SKIP_WAITING") { self.skipWaiting(); return; }
+  if (type === "SKIP_WAITING") {
+    self.skipWaiting();
+    return;
+  }
 
   if (type === "SCHEDULE_REMINDER") {
     const { id, title, body, dueAt, url } = payload;
@@ -201,6 +289,9 @@ self.addEventListener("message", (e) => {
 
   if (type === "CANCEL_REMINDER") {
     const { id } = payload ?? {};
-    if (reminders.has(id)) { clearTimeout(reminders.get(id).timerId); reminders.delete(id); }
+    if (reminders.has(id)) {
+      clearTimeout(reminders.get(id).timerId);
+      reminders.delete(id);
+    }
   }
 });

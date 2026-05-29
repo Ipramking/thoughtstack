@@ -21,23 +21,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname   = usePathname();
   const router     = useRouter();
   const isOnline   = useOnlineStatus();
-  const { updateProfile, profile } = useAppStore();
+  const { updateProfile } = useAppStore();
   useSyncData(); // cross-device sync — pull on mount, push on focus/interval
 
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const isPublic = PUBLIC_PATHS.includes(pathname);
+  const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
 
-  // Sync auth user into local store when online
+  // Sync auth user name/email into local store
   useEffect(() => {
     if (session?.user?.name)  updateProfile({ name:  session.user.name  });
     if (session?.user?.email) updateProfile({ email: session.user.email });
   }, [session, updateProfile]);
 
-  // Auth guard — SKIP redirect when offline so users can access cached data
+  // Auth guard — only redirects when ONLINE and session has resolved
   useEffect(() => {
-    if (status === "loading") return;
     if (isPublic) return;
-    if (!isOnline) return;          // offline → keep whatever is in store
+    if (status === "loading") return;
+    if (!isOnline) return;   // offline → never redirect; local data is the source of truth
     if (!session) {
       router.replace(`/auth?callbackUrl=${encodeURIComponent(pathname)}`);
     }
@@ -48,8 +48,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     setMobileSidebarOpen(false);
   }, [pathname]);
 
-  // Loading spinner — only show when online (offline sessions never resolve)
-  if (status === "loading" && !isPublic && isOnline) {
+  // ── Public routes (auth page, etc.) ──────────────────────────────────────────
+  if (isPublic) return <>{children}</>;
+
+  // ── Loading spinner — only while waiting for session resolution ONLINE ────────
+  // Offline: session either resolves from SW cache or stays null.
+  // Either way we show the app — no spinner needed offline.
+  if (status === "loading" && isOnline) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="w-6 h-6 border-2 border-foreground border-t-transparent rounded-full animate-spin" />
@@ -57,35 +62,32 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // Offline + no session + not public → show offline shell with store data
-  if (!isOnline && !session && !isPublic) {
-    return (
-      <div className="flex h-screen overflow-hidden bg-background">
-        <Sidebar mobileOpen={mobileSidebarOpen} onClose={() => setMobileSidebarOpen(false)} />
-        <MobileTopBar onMenuClick={() => setMobileSidebarOpen(true)} />
-        <MainContentInner>
-          <OfflineBanner fullscreen name={profile.name} />
-        </MainContentInner>
-      </div>
-    );
-  }
-
-  if (isPublic) return <>{children}</>;
-
+  // ── Full app shell — works online and offline ─────────────────────────────────
+  // When offline the user's Zustand data (persisted to localStorage) is still
+  // available, so tasks / journal / calendar all render normally.
+  // We just show the offline banner and disable AI + sync.
   return (
     <div className="flex h-screen overflow-hidden bg-background">
-      <Sidebar mobileOpen={mobileSidebarOpen} onClose={() => setMobileSidebarOpen(false)} />
+      <Sidebar
+        mobileOpen={mobileSidebarOpen}
+        onClose={() => setMobileSidebarOpen(false)}
+      />
+
       <MobileTopBar onMenuClick={() => setMobileSidebarOpen(true)} />
 
       <MainContentInner>
-        {/* Offline banner at top of content */}
+        {/* Offline banner — inline at the top, doesn't block content */}
         {!isOnline && <OfflineBanner />}
         {children}
       </MainContentInner>
 
-      <ThoughtsPanel />
+      {/* AI panel — only render when online (avoids pointless API calls) */}
+      {isOnline && <ThoughtsPanel />}
+
       <InstallPrompt />
-      <Onboarding />
+
+      {/* Onboarding — show even offline if session is present */}
+      {(session || !isOnline) && <Onboarding />}
     </div>
   );
 }

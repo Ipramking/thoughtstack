@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { callThoughts } from "@/lib/thoughts-ai";
+import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { ThoughtsAction, ThoughtsContext } from "@/types";
 import { cn, isToday, formatDate } from "@/lib/utils";
 import { toast } from "@/hooks/useToast";
@@ -33,6 +34,7 @@ const GREET = () => {
 
 export default function HomePage() {
   const { tasks, journals, events, profile, addTask, addEvent, completeTask, toggleThoughtsPanel, getStreak } = useAppStore();
+  const isOnline = useOnlineStatus();
 
   const [capture, setCapture]   = useState("");
   const [aiLoading, setAiLoad]  = useState(false);
@@ -59,10 +61,18 @@ export default function HomePage() {
     setAiLoad(true);
     setAiResult(null);
     try {
+      // callThoughts already falls back to local rule-based AI when offline
       const res = await callThoughts(text, [], context);
       setAiResult({ reply: res.reply, actions: res.actions ?? [] });
     } catch {
-      toast.error("Couldn't reach Thoughts — try again");
+      // Shouldn't happen (callThoughts catches internally), but guard just in case
+      if (!isOnline) {
+        toast.info("You're offline — AI uses local mode");
+        const res = await callThoughts(text, [], context);
+        setAiResult({ reply: res.reply, actions: res.actions ?? [] });
+      } else {
+        toast.error("Couldn't reach Thoughts — try again");
+      }
     } finally {
       setAiLoad(false);
     }
