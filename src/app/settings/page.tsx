@@ -76,11 +76,14 @@ export default function SettingsPage() {
       try {
         const data = JSON.parse(reader.result as string);
         const state = useAppStore.getState();
-        if (data.tasks)    data.tasks.forEach((t: Parameters<typeof state.addTask>[0]) => state.addTask(t));
-        if (data.journals) data.journals.forEach((j: Parameters<typeof state.addJournal>[0]) => state.addJournal(j));
-        if (data.events)   data.events.forEach((ev: Parameters<typeof state.addEvent>[0]) => state.addEvent(ev));
+        // Use upsert* so we preserve the original ids from the backup.
+        // Otherwise re-importing the same backup would duplicate everything.
+        let restored = 0;
+        if (Array.isArray(data.tasks))    { data.tasks.forEach(state.upsertTask);       restored += data.tasks.length; }
+        if (Array.isArray(data.journals)) { data.journals.forEach(state.upsertJournal); restored += data.journals.length; }
+        if (Array.isArray(data.events))   { data.events.forEach(state.upsertEvent);    restored += data.events.length; }
         if (data.profile)  state.updateProfile(data.profile);
-        toast.success("Data restored successfully");
+        toast.success(`Restored ${restored} item${restored === 1 ? "" : "s"}`);
       } catch {
         toast.error("Invalid backup file");
       }
@@ -235,7 +238,20 @@ export default function SettingsPage() {
                   }
                 />
               ))}
-              <div className="pt-4">
+              <div className="pt-4 space-y-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full rounded-xl gap-1.5"
+                  onClick={() => {
+                    const store = useAppStore.getState();
+                    const removed = store.dedupTasks() + store.dedupJournals() + store.dedupEvents();
+                    if (removed > 0) toast.success(`Removed ${removed} duplicate${removed === 1 ? "" : "s"}`);
+                    else toast.info("No duplicates found");
+                  }}
+                >
+                  <Check className="w-3.5 h-3.5" /> Remove duplicates
+                </Button>
                 <Button variant="destructive" size="sm" className="w-full rounded-xl gap-1.5" onClick={() => clearData("all")}>
                   <Trash2 className="w-4 h-4" /> Clear all data
                 </Button>

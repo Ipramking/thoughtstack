@@ -8,14 +8,6 @@ import { Task, JournalEntry, CalendarEvent } from "@/types";
 
 type SyncRow<T> = { id: string; data: T; updated_at: string };
 
-function newer<T extends { updatedAt?: string; createdAt?: string }>(
-  local: T,
-  remoteUpdatedAt: string
-): boolean {
-  const localTs = local.updatedAt ?? local.createdAt ?? "0";
-  return remoteUpdatedAt > localTs;
-}
-
 async function pushAll(
   tasks: Task[],
   journals: JournalEntry[],
@@ -36,14 +28,39 @@ async function pushAll(
   );
 }
 
+async function pushDeletes(
+  pending: { tasks: string[]; journals: string[]; events: string[] },
+  clearPendingDeletes: (type: "tasks" | "journals" | "events", ids?: string[]) => void
+): Promise<void> {
+  const deleteOne = async (type: "tasks" | "journals" | "events", id: string) => {
+    const res = await fetch("/api/sync", {
+      method:  "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ type, id }),
+    });
+    return res.ok;
+  };
+
+  for (const type of ["tasks", "journals", "events"] as const) {
+    const ids = pending[type];
+    if (!ids.length) continue;
+    const successful: string[] = [];
+    for (const id of ids) {
+      try {
+        if (await deleteOne(type, id)) successful.push(id);
+      } catch {/* offline / network err — keep in queue */}
+    }
+    if (successful.length) clearPendingDeletes(type, successful);
+  }
+}
+
 export function useSyncData() {
   const { data: session }     = useSession();
   const isOnline              = useOnlineStatus();
   const {
-    tasks, journals, events,
-    addTask, updateTask,
-    addJournal, updateJournal,
-    addEvent, updateEvent,
+    tasks, journals, events, pendingDeletes,
+    upsertTask, upsertJournal, upsertEvent,
+    clearPendingDeletes,
   } = useAppStore();
 
   const hasPulled = useRef(false);
@@ -55,6 +72,9 @@ export function useSyncData() {
 
     (async () => {
       try {
+        // Push any pending deletes FIRST so we don't pull back items we just deleted
+        await pushDeletes(useAppStore.getState().pendingDeletes, clearPendingDeletes);
+
         const res = await fetch("/api/sync");
         if (!res.ok) return;
         const remote = await res.json() as {
@@ -63,43 +83,26 @@ export function useSyncData() {
           events:   SyncRow<CalendarEvent>[];
         };
 
-        const stripId = <T extends { id?: string }>(d: T): Omit<T, "id"> => {
-          const r = { ...d } as Partial<T>;
-          delete r.id;
-          return r as Omit<T, "id">;
-        };
+        // ── Critical fix: preserve remote id when merging ──────────────────
+        // The old code called addTask(stripId(...)) which generated a NEW id
+        // for every pulled row. That caused exponential duplication:
+        //   Pull L1 → add as L2 → push L2 → next pull gets [L1, L2] → add L2 as L3 → ...
+        // upsertTask preserves the row's id so the same logical task always
+        // resolves to the same local row.
 
-        // Merge tasks
-        const localTaskIds = new Set(tasks.map((t) => t.id));
+        const recentlyDeleted = useAppStore.getState().pendingDeletes;
+
         for (const row of remote.tasks) {
-          if (!localTaskIds.has(row.id)) {
-            addTask(stripId(row.data) as Omit<Task, "id" | "createdAt" | "updatedAt">);
-          } else {
-            const local = tasks.find((t) => t.id === row.id)!;
-            if (newer(local, row.updated_at)) updateTask(row.id, row.data);
-          }
+          if (recentlyDeleted.tasks.includes(row.id)) continue;
+          upsertTask({ ...row.data, id: row.id });
         }
-
-        // Merge journals
-        const localJIds = new Set(journals.map((j) => j.id));
         for (const row of remote.journals) {
-          if (!localJIds.has(row.id)) {
-            addJournal(stripId(row.data) as Omit<JournalEntry, "id" | "createdAt" | "updatedAt">);
-          } else {
-            const local = journals.find((j) => j.id === row.id)!;
-            if (newer(local, row.updated_at)) updateJournal(row.id, row.data);
-          }
+          if (recentlyDeleted.journals.includes(row.id)) continue;
+          upsertJournal({ ...row.data, id: row.id });
         }
-
-        // Merge events
-        const localEIds = new Set(events.map((ev) => ev.id));
         for (const row of remote.events) {
-          if (!localEIds.has(row.id)) {
-            addEvent(stripId(row.data) as Omit<CalendarEvent, "id" | "createdAt">);
-          } else {
-            const local = events.find((ev) => ev.id === row.id)!;
-            if (newer(local, row.updated_at)) updateEvent(row.id, row.data);
-          }
+          if (recentlyDeleted.events.includes(row.id)) continue;
+          upsertEvent({ ...row.data, id: row.id });
         }
       } catch {
         // Silent — offline or server error, local data takes precedence
@@ -112,20 +115,27 @@ export function useSyncData() {
   useEffect(() => {
     if (!session?.user || !isOnline) return;
 
-    // Guard each push against network errors silently
-    const push = () =>
-      pushAll(tasks, journals, events).catch(() => {/* silent */});
+    const push = async () => {
+      try {
+        // Propagate deletes BEFORE pushing the current state so the server
+        // gets the deletions before any upsert of the same id.
+        await pushDeletes(useAppStore.getState().pendingDeletes, clearPendingDeletes);
+        await pushAll(tasks, journals, events);
+      } catch {/* silent */}
+    };
 
     const interval = setInterval(push, 3 * 60 * 1000);
     window.addEventListener("focus", push);
-
-    // Immediate push on mount (session just resolved + online)
-    push();
+    push(); // immediate push on mount
 
     return () => {
       clearInterval(interval);
       window.removeEventListener("focus", push);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, isOnline, tasks.length, journals.length, events.length]);
+  }, [
+    session, isOnline,
+    tasks.length, journals.length, events.length,
+    pendingDeletes.tasks.length, pendingDeletes.journals.length, pendingDeletes.events.length,
+  ]);
 }

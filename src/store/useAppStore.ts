@@ -54,16 +54,27 @@ interface AppState {
   addSubtask:     (taskId: string, title: string) => void;
   toggleSubtask:  (taskId: string, subtaskId: string) => void;
   deleteSubtask:  (taskId: string, subtaskId: string) => void;
+  // Sync helpers — preserve remote id, used by useSyncData on pull
+  upsertTask:     (task: Task) => void;
+  dedupTasks:     () => number;
 
   journals: JournalEntry[];
   addJournal:    (e: Omit<JournalEntry, "id" | "createdAt" | "updatedAt">) => JournalEntry;
   updateJournal: (id: string, u: Partial<JournalEntry>) => void;
   deleteJournal: (id: string) => void;
+  upsertJournal: (entry: JournalEntry) => void;
+  dedupJournals: () => number;
 
   events: CalendarEvent[];
   addEvent:    (e: Omit<CalendarEvent, "id" | "createdAt">) => CalendarEvent;
   updateEvent: (id: string, u: Partial<CalendarEvent>) => void;
   deleteEvent: (id: string) => void;
+  upsertEvent: (event: CalendarEvent) => void;
+  dedupEvents: () => number;
+
+  // Track deletes so the next push can propagate them to Supabase
+  pendingDeletes: { tasks: string[]; journals: string[]; events: string[] };
+  clearPendingDeletes: (type: "tasks" | "journals" | "events", ids?: string[]) => void;
 
   messages: ThoughtsMessage[];
   addMessage:    (m: Omit<ThoughtsMessage, "id" | "timestamp">) => void;
@@ -103,7 +114,40 @@ export const useAppStore = create<AppState>()(
       },
       updateTask: (id, u) =>
         set((s) => ({ tasks: s.tasks.map((t) => t.id === id ? { ...t, ...u, updatedAt: now() } : t) })),
-      deleteTask: (id) => set((s) => ({ tasks: s.tasks.filter((t) => t.id !== id) })),
+      deleteTask: (id) => set((s) => ({
+        tasks: s.tasks.filter((t) => t.id !== id),
+        pendingDeletes: { ...s.pendingDeletes, tasks: [...s.pendingDeletes.tasks, id] },
+      })),
+      // Sync upsert — preserves remote id and timestamps, last-write-wins
+      upsertTask: (task) => set((s) => {
+        const existing = s.tasks.find((t) => t.id === task.id);
+        if (!existing) return { tasks: [task, ...s.tasks] };
+        const localTs  = existing.updatedAt ?? existing.createdAt ?? "0";
+        const remoteTs = task.updatedAt    ?? task.createdAt    ?? "0";
+        if (remoteTs > localTs) {
+          return { tasks: s.tasks.map((t) => t.id === task.id ? task : t) };
+        }
+        return s;
+      }),
+      // Remove duplicate tasks: same title + dueDate + status. Keeps the newest.
+      dedupTasks: () => {
+        const before = get().tasks.length;
+        const keyOf = (t: Task) => `${t.title.trim().toLowerCase()}|${t.dueDate ?? ""}|${t.status}`;
+        const groups = new Map<string, Task[]>();
+        for (const t of get().tasks) {
+          const k = keyOf(t);
+          const arr = groups.get(k) ?? [];
+          arr.push(t);
+          groups.set(k, arr);
+        }
+        const kept: Task[] = [];
+        for (const arr of groups.values()) {
+          arr.sort((a, b) => (b.updatedAt ?? b.createdAt ?? "").localeCompare(a.updatedAt ?? a.createdAt ?? ""));
+          kept.push(arr[0]);
+        }
+        set({ tasks: kept });
+        return before - kept.length;
+      },
       completeTask: (id) => {
         const { tasks, addTask } = get();
         const task = tasks.find((t) => t.id === id);
@@ -155,7 +199,40 @@ export const useAppStore = create<AppState>()(
       },
       updateJournal: (id, u) =>
         set((s) => ({ journals: s.journals.map((j) => j.id === id ? { ...j, ...u, updatedAt: now() } : j) })),
-      deleteJournal: (id) => set((s) => ({ journals: s.journals.filter((j) => j.id !== id) })),
+      deleteJournal: (id) => set((s) => ({
+        journals: s.journals.filter((j) => j.id !== id),
+        pendingDeletes: { ...s.pendingDeletes, journals: [...s.pendingDeletes.journals, id] },
+      })),
+      upsertJournal: (entry) => set((s) => {
+        const existing = s.journals.find((j) => j.id === entry.id);
+        if (!existing) return { journals: [entry, ...s.journals] };
+        const localTs  = existing.updatedAt ?? existing.createdAt ?? "0";
+        const remoteTs = entry.updatedAt    ?? entry.createdAt    ?? "0";
+        if (remoteTs > localTs) {
+          return { journals: s.journals.map((j) => j.id === entry.id ? entry : j) };
+        }
+        return s;
+      }),
+      // Dedup journals by title + createdAt date (same minute = same entry)
+      dedupJournals: () => {
+        const before = get().journals.length;
+        const keyOf = (j: JournalEntry) =>
+          `${j.title.trim().toLowerCase()}|${(j.createdAt ?? "").slice(0, 16)}`;
+        const groups = new Map<string, JournalEntry[]>();
+        for (const j of get().journals) {
+          const k = keyOf(j);
+          const arr = groups.get(k) ?? [];
+          arr.push(j);
+          groups.set(k, arr);
+        }
+        const kept: JournalEntry[] = [];
+        for (const arr of groups.values()) {
+          arr.sort((a, b) => (b.updatedAt ?? b.createdAt ?? "").localeCompare(a.updatedAt ?? a.createdAt ?? ""));
+          kept.push(arr[0]);
+        }
+        set({ journals: kept });
+        return before - kept.length;
+      },
 
       // ── Calendar ─────────────────────────────────────────────────────────
       events: [],
@@ -166,7 +243,49 @@ export const useAppStore = create<AppState>()(
       },
       updateEvent: (id, u) =>
         set((s) => ({ events: s.events.map((e) => e.id === id ? { ...e, ...u } : e) })),
-      deleteEvent: (id) => set((s) => ({ events: s.events.filter((e) => e.id !== id) })),
+      deleteEvent: (id) => set((s) => ({
+        events: s.events.filter((e) => e.id !== id),
+        pendingDeletes: { ...s.pendingDeletes, events: [...s.pendingDeletes.events, id] },
+      })),
+      upsertEvent: (event) => set((s) => {
+        const existing = s.events.find((e) => e.id === event.id);
+        if (!existing) return { events: [event, ...s.events] };
+        const localTs  = existing.createdAt ?? "0";
+        const remoteTs = event.createdAt    ?? "0";
+        if (remoteTs > localTs) {
+          return { events: s.events.map((e) => e.id === event.id ? event : e) };
+        }
+        return s;
+      }),
+      // Dedup events by title + date + startTime
+      dedupEvents: () => {
+        const before = get().events.length;
+        const keyOf = (e: CalendarEvent) =>
+          `${e.title.trim().toLowerCase()}|${e.date}|${e.startTime ?? ""}`;
+        const groups = new Map<string, CalendarEvent[]>();
+        for (const e of get().events) {
+          const k = keyOf(e);
+          const arr = groups.get(k) ?? [];
+          arr.push(e);
+          groups.set(k, arr);
+        }
+        const kept: CalendarEvent[] = [];
+        for (const arr of groups.values()) {
+          arr.sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
+          kept.push(arr[0]);
+        }
+        set({ events: kept });
+        return before - kept.length;
+      },
+
+      // ── Pending deletes — synced to server on next push ─────────────────────
+      pendingDeletes: { tasks: [], journals: [], events: [] },
+      clearPendingDeletes: (type, ids) => set((s) => ({
+        pendingDeletes: {
+          ...s.pendingDeletes,
+          [type]: ids ? s.pendingDeletes[type].filter((id) => !ids.includes(id)) : [],
+        },
+      })),
 
       // ── Thoughts AI ──────────────────────────────────────────────────────
       messages: [],
@@ -207,6 +326,7 @@ export const useAppStore = create<AppState>()(
         events: s.events, messages: s.messages, dailyStats: s.dailyStats,
         pushSubscription: s.pushSubscription, sidebarCollapsed: s.sidebarCollapsed,
         onboarded: s.onboarded, notificationsEnabled: s.notificationsEnabled,
+        pendingDeletes: s.pendingDeletes,
       }),
     }
   )
