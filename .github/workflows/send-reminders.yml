@@ -1,0 +1,36 @@
+name: Send due reminders
+
+# Runs every minute (well, every 5 — GitHub Actions cron minimum is 5 min).
+# This is the workaround for Vercel Hobby's daily-only cron limit.
+#
+# Setup (one-time):
+#   1. Go to https://github.com/Ipramking/thoughtstack/settings/secrets/actions
+#   2. Click "New repository secret"
+#   3. Name: CRON_SECRET — Value: same string you set in Vercel env vars
+#   4. Save. That's it.
+#
+# After the first run, the Actions tab will show success/failure for each run.
+# A failed run is a free signal that the cron endpoint is broken.
+
+on:
+  schedule:
+    # Every 5 minutes. GitHub Actions does NOT support sub-5-minute cron.
+    # (cron-job.org would give per-minute precision if you need it later.)
+    - cron: "*/5 * * * *"
+  # Lets you manually trigger from the Actions tab to test
+  workflow_dispatch:
+
+jobs:
+  ping-cron:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hit /api/cron/send-reminders
+        run: |
+          response=$(curl -s -o /tmp/body -w "%{http_code}" \
+            "https://thoughtstack-ten.vercel.app/api/cron/send-reminders?secret=${{ secrets.CRON_SECRET }}")
+          echo "HTTP $response"
+          cat /tmp/body
+          # Fail the workflow if Vercel returned non-2xx
+          if [ "$response" -lt 200 ] || [ "$response" -ge 300 ]; then
+            exit 1
+          fi
