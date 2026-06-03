@@ -22,9 +22,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname   = usePathname();
   const router     = useRouter();
   const isOnline   = useOnlineStatus();
-  const { updateProfile } = useAppStore();
-  useSyncData();             // cross-device sync — pull on mount, push on focus/interval
-  useReminderScheduler();    // re-arm task reminders every 5 min (survives SW restarts)
+  const updateProfile = useAppStore((s) => s.updateProfile);
+  const totalItems    = useAppStore((s) => s.tasks.length + s.journals.length + s.events.length);
+  useSyncData();             // periodic background sync (now throttled to 5 min)
+  useReminderScheduler();    // re-arm task reminders (every 15 min)
+
+  // Emergency safety: if dataset is huge (from the legacy duplication bug),
+  // auto-dedupe on first mount so the app doesn't choke loading 10,000+ items.
+  useEffect(() => {
+    if (totalItems < 1000) return;
+    const store = useAppStore.getState();
+    const removed = store.dedupTasks() + store.dedupJournals() + store.dedupEvents();
+    if (removed > 0) {
+      console.warn(`[AppShell] Auto-removed ${removed} duplicates (had ${totalItems} items)`);
+    }
+    // Run only once per mount — checking totalItems again would re-trigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p));

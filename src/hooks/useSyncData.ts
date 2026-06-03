@@ -8,71 +8,100 @@ import { Task, JournalEntry, CalendarEvent } from "@/types";
 
 type SyncRow<T> = { id: string; data: T; updated_at: string };
 
-async function pushAll(
-  tasks: Task[],
-  journals: JournalEntry[],
-  events: CalendarEvent[]
+// EMERGENCY GUARDRAIL: never push more than this many items per request.
+// Past this size, JSON.stringify blocks the main thread for hundreds of ms
+// on mobile, and the request body can exceed Supabase / Vercel limits.
+const CHUNK_SIZE = 100;
+
+// Hard ceiling: if local data ever exceeds this, we refuse to push anything
+// until the user runs "Remove duplicates". Prevents catastrophic uploads.
+const MAX_ITEMS_PER_TYPE = 5000;
+
+async function pushChunked<T extends { id: string; updatedAt?: string; createdAt?: string }>(
+  type: "tasks" | "journals" | "events",
+  items: T[],
 ): Promise<void> {
-  const toRow = <T extends { id: string; updatedAt?: string; createdAt?: string }>(item: T) => ({
+  if (!items.length) return;
+  if (items.length > MAX_ITEMS_PER_TYPE) {
+    console.warn(`[sync] Refusing to push ${items.length} ${type} — exceeds safety cap. Run "Remove duplicates" in Settings.`);
+    return;
+  }
+
+  const toRow = (item: T) => ({
     id:         item.id,
     data:       item,
     updated_at: item.updatedAt ?? item.createdAt ?? new Date().toISOString(),
   });
 
-  await Promise.all(
-    [
-      tasks.length    && fetch("/api/sync", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "tasks",    items: tasks.map(toRow)    }) }),
-      journals.length && fetch("/api/sync", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "journals", items: journals.map(toRow) }) }),
-      events.length   && fetch("/api/sync", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "events",   items: events.map(toRow)   }) }),
-    ].filter(Boolean)
-  );
+  for (let i = 0; i < items.length; i += CHUNK_SIZE) {
+    const chunk = items.slice(i, i + CHUNK_SIZE).map(toRow);
+    try {
+      await fetch("/api/sync", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ type, items: chunk }),
+      });
+    } catch {/* silent */}
+  }
+}
+
+async function pushAll(
+  tasks: Task[],
+  journals: JournalEntry[],
+  events: CalendarEvent[],
+): Promise<void> {
+  // Sequential, NOT parallel — running three concurrent multi-MB uploads on
+  // a phone is what was killing devices.
+  await pushChunked("tasks", tasks);
+  await pushChunked("journals", journals);
+  await pushChunked("events", events);
 }
 
 async function pushDeletes(
   pending: { tasks: string[]; journals: string[]; events: string[] },
-  clearPendingDeletes: (type: "tasks" | "journals" | "events", ids?: string[]) => void
+  clearPendingDeletes: (type: "tasks" | "journals" | "events", ids?: string[]) => void,
 ): Promise<void> {
-  const deleteOne = async (type: "tasks" | "journals" | "events", id: string) => {
-    const res = await fetch("/api/sync", {
-      method:  "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ type, id }),
-    });
-    return res.ok;
-  };
-
   for (const type of ["tasks", "journals", "events"] as const) {
     const ids = pending[type];
     if (!ids.length) continue;
     const successful: string[] = [];
     for (const id of ids) {
       try {
-        if (await deleteOne(type, id)) successful.push(id);
-      } catch {/* offline / network err — keep in queue */}
+        const res = await fetch("/api/sync", {
+          method:  "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ type, id }),
+        });
+        if (res.ok) successful.push(id);
+      } catch {/* offline — keep in queue */}
     }
     if (successful.length) clearPendingDeletes(type, successful);
   }
 }
 
 export function useSyncData() {
-  const { data: session }     = useSession();
-  const isOnline              = useOnlineStatus();
-  const {
-    tasks, journals, events, pendingDeletes,
-    upsertTask, upsertJournal, upsertEvent,
-    clearPendingDeletes,
-  } = useAppStore();
+  const { data: session } = useSession();
+  const isOnline          = useOnlineStatus();
 
-  const hasPulled = useRef(false);
+  // Subscribe to ONLY the fields we need, not the whole store, so this
+  // component doesn't re-render on unrelated state changes (sidebar toggles, etc).
+  const upsertTask    = useAppStore((s) => s.upsertTask);
+  const upsertJournal = useAppStore((s) => s.upsertJournal);
+  const upsertEvent   = useAppStore((s) => s.upsertEvent);
+  const clearPendingDeletes = useAppStore((s) => s.clearPendingDeletes);
 
-  // ── Pull on first mount when online + authenticated ───────────────────────────
+  const hasPulled  = useRef(false);
+  const isPushing  = useRef(false);
+  const lastPushAt = useRef(0);
+
+  // ── Pull once per session ────────────────────────────────────────────────────
   useEffect(() => {
     if (!session?.user || !isOnline || hasPulled.current) return;
     hasPulled.current = true;
 
     (async () => {
       try {
-        // Push any pending deletes FIRST so we don't pull back items we just deleted
+        // Push pending deletes first so we don't pull back items we just deleted
         await pushDeletes(useAppStore.getState().pendingDeletes, clearPendingDeletes);
 
         const res = await fetch("/api/sync");
@@ -82,13 +111,6 @@ export function useSyncData() {
           journals: SyncRow<JournalEntry>[];
           events:   SyncRow<CalendarEvent>[];
         };
-
-        // ── Critical fix: preserve remote id when merging ──────────────────
-        // The old code called addTask(stripId(...)) which generated a NEW id
-        // for every pulled row. That caused exponential duplication:
-        //   Pull L1 → add as L2 → push L2 → next pull gets [L1, L2] → add L2 as L3 → ...
-        // upsertTask preserves the row's id so the same logical task always
-        // resolves to the same local row.
 
         const recentlyDeleted = useAppStore.getState().pendingDeletes;
 
@@ -104,38 +126,39 @@ export function useSyncData() {
           if (recentlyDeleted.events.includes(row.id)) continue;
           upsertEvent({ ...row.data, id: row.id });
         }
-      } catch {
-        // Silent — offline or server error, local data takes precedence
-      }
+      } catch {/* silent */}
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, isOnline]);
+  }, [session, isOnline, upsertTask, upsertJournal, upsertEvent, clearPendingDeletes]);
 
-  // ── Push every 3 min + on window focus — only when online ────────────────────
+  // ── Periodic push (every 5 min) — NOT on every state change or focus ─────────
   useEffect(() => {
     if (!session?.user || !isOnline) return;
 
     const push = async () => {
+      // Reentrancy guard — never run two pushes in parallel
+      if (isPushing.current) return;
+      // Throttle — refuse to push more often than once per 60 seconds
+      if (Date.now() - lastPushAt.current < 60_000) return;
+
+      isPushing.current = true;
       try {
-        // Propagate deletes BEFORE pushing the current state so the server
-        // gets the deletions before any upsert of the same id.
-        await pushDeletes(useAppStore.getState().pendingDeletes, clearPendingDeletes);
+        const { tasks, journals, events, pendingDeletes } = useAppStore.getState();
+        await pushDeletes(pendingDeletes, clearPendingDeletes);
         await pushAll(tasks, journals, events);
+        lastPushAt.current = Date.now();
       } catch {/* silent */}
+      finally {
+        isPushing.current = false;
+      }
     };
 
-    const interval = setInterval(push, 3 * 60 * 1000);
-    window.addEventListener("focus", push);
-    push(); // immediate push on mount
+    // First push after 30 s grace period (let initial pull settle)
+    const initial = setTimeout(push, 30_000);
+    const interval = setInterval(push, 5 * 60 * 1000);
 
     return () => {
+      clearTimeout(initial);
       clearInterval(interval);
-      window.removeEventListener("focus", push);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    session, isOnline,
-    tasks.length, journals.length, events.length,
-    pendingDeletes.tasks.length, pendingDeletes.journals.length, pendingDeletes.events.length,
-  ]);
+  }, [session, isOnline, clearPendingDeletes]);
 }

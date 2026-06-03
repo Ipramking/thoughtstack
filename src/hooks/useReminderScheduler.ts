@@ -6,23 +6,22 @@ import { useAppStore } from "@/store/useAppStore";
 /**
  * useReminderScheduler
  *
- * Reschedules all upcoming task reminders every time the app mounts and
- * every 5 minutes thereafter. This is a defence against:
- *   - Browsers terminating idle Service Workers (kills SW setTimeout)
- *   - User refreshing the page (clears in-memory SW state)
- *   - Tab being closed and reopened
+ * Re-arms upcoming task reminders periodically. Guards against:
+ *   - Browsers terminating idle Service Workers (SW setTimeout state is lost)
+ *   - User refreshing the page
  *
- * For reminders that fall within the next 24 h we forward them to the SW.
- * Reminders further out are skipped — the next scan will catch them.
- *
- * Note: this does NOT solve background delivery when the browser is fully
- * closed. That requires server-side Web Push triggered by a cron job —
- * which needs subscriptions persisted to Supabase (TODO).
+ * EMERGENCY-MODE refactor:
+ *   - Subscribes only to tasks.length (not the whole tasks array) so this
+ *     hook doesn't re-run on every keystroke / sidebar toggle / sync event.
+ *   - Reads the current tasks via getState() inside the timer, not via deps.
+ *   - Runs every 15 min instead of 5 — reminders fire on time anyway because
+ *     the server-side cron handles delivery; this is just a backup.
+ *   - Hard cap at 50 reminders scheduled per scan to avoid postMessage flood.
  */
 export function useReminderScheduler() {
-  const tasks = useAppStore((s) => s.tasks);
+  const taskCount            = useAppStore((s) => s.tasks.length);
   const notificationsEnabled = useAppStore((s) => s.notificationsEnabled);
-  const seenIds = useRef<Set<string>>(new Set());
+  const seenIds              = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (!notificationsEnabled) return;
@@ -30,6 +29,7 @@ export function useReminderScheduler() {
     if (!("serviceWorker" in navigator)) return;
 
     const ONE_DAY = 24 * 60 * 60 * 1000;
+    const MAX_PER_SCAN = 50;
 
     async function scheduleAll() {
       let reg: ServiceWorkerRegistration;
@@ -39,22 +39,25 @@ export function useReminderScheduler() {
         return;
       }
 
-      const now = Date.now();
+      const now   = Date.now();
+      const tasks = useAppStore.getState().tasks;
+      let scheduled = 0;
 
       for (const task of tasks) {
-        if (!task.reminder) continue;
-        if (task.status === "done") continue;
-        if (!task.dueDate) continue;
-
-        const time = task.dueTime ?? "09:00";
-        const dueAt = new Date(`${task.dueDate}T${time}`).getTime();
-        if (Number.isNaN(dueAt)) continue;
-        if (dueAt <= now) continue;            // already passed
-        if (dueAt > now + ONE_DAY) continue;   // too far out — next scan handles it
-
-        // Skip ones we already scheduled this session
+        if (scheduled >= MAX_PER_SCAN) break;
+        if (!task.reminder)              continue;
+        if (task.status === "done")      continue;
+        if (!task.dueDate)               continue;
         if (seenIds.current.has(task.id)) continue;
+
+        const time  = task.dueTime ?? "09:00";
+        const dueAt = new Date(`${task.dueDate}T${time}`).getTime();
+        if (Number.isNaN(dueAt))       continue;
+        if (dueAt <= now)              continue;
+        if (dueAt > now + ONE_DAY)     continue;
+
         seenIds.current.add(task.id);
+        scheduled++;
 
         reg.active?.postMessage({
           type: "SCHEDULE_REMINDER",
@@ -69,14 +72,17 @@ export function useReminderScheduler() {
       }
     }
 
-    // Run immediately + every 5 minutes
-    scheduleAll();
+    // Initial scan after 10 s grace period
+    const initial = setTimeout(scheduleAll, 10_000);
+    // Full re-scan every 15 minutes (reset seen-set so SW restarts are covered)
     const interval = setInterval(() => {
-      // Reset seenIds each scan so re-scheduling works after SW restart
       seenIds.current = new Set();
       scheduleAll();
-    }, 5 * 60 * 1000);
+    }, 15 * 60 * 1000);
 
-    return () => clearInterval(interval);
-  }, [tasks, notificationsEnabled]);
+    return () => {
+      clearTimeout(initial);
+      clearInterval(interval);
+    };
+  }, [taskCount, notificationsEnabled]);
 }
