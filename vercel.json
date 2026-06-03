@@ -10,11 +10,5 @@
         { "key": "Service-Worker-Allowed", "value": "/"                         }
       ]
     }
-  ],
-  "crons": [
-    {
-      "path": "/api/cron/send-reminders",
-      "schedule": "*/1 * * * *"
-    }
   ]
 }
