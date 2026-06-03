@@ -1,7 +1,16 @@
 /**
  * generate-icons.js
- * Creates public/icon-192.png and public/icon-512.png using only Node.js built-ins.
- * No external packages needed.
+ *
+ * Creates public/icon-192.png and public/icon-512.png.
+ *
+ * IMPORTANT — maskable safe zone:
+ *   Android's adaptive icon system can crop the icon into a circle, squircle,
+ *   rounded square, etc. To guarantee the brand mark survives any mask, we:
+ *     1. Fill the entire square with the gradient (NO transparent corners).
+ *     2. Keep the "T" glyph inside the inner 60% of the canvas (~20% padding).
+ *   This way the icon works for both `purpose: "any"` and `purpose: "maskable"`.
+ *
+ * Uses only Node.js built-ins (zlib) — no external image library needed.
  */
 const zlib = require("zlib");
 const fs   = require("fs");
@@ -34,47 +43,32 @@ function chunk(type, data) {
 }
 
 // ── PNG builder ─────────────────────────────────────────────────────────────
-// Draws a rounded-square icon with a gradient-ish look (two-tone blended per row)
 function buildPNG(size) {
   const SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 
-  // IHDR
+  // IHDR — 8-bit RGB (no alpha, opaque corners for maskable safety)
   const ihdr = Buffer.alloc(13);
   ihdr.writeUInt32BE(size, 0);
   ihdr.writeUInt32BE(size, 4);
   ihdr[8] = 8; // bit depth
-  ihdr[9] = 6; // RGBA
+  ihdr[9] = 2; // RGB (color type 2)
   ihdr[10] = 0; ihdr[11] = 0; ihdr[12] = 0;
 
-  // Brand colours: top = #7c3aed (purple-600), bottom = #4f46e5 (indigo-600)
+  // Brand gradient: top = #7c3aed (purple-600), bottom = #4f46e5 (indigo-600)
   const topR = 124, topG = 58,  topB = 237;
   const botR = 79,  botG = 70,  botB = 229;
-  // Letter "T" foreground
-  const fgR = 255, fgG = 255, fgB = 255;
+  const fgR  = 255, fgG  = 255, fgB  = 255;
 
-  // Corner radius
-  const R = Math.round(size * 0.22);
-
-  function isInsideRoundedRect(x, y) {
-    const cx = x - size / 2 + 0.5;
-    const cy = y - size / 2 + 0.5;
-    const hw = size / 2 - R;
-    const hh = size / 2 - R;
-    const dx = Math.max(0, Math.abs(cx) - hw);
-    const dy = Math.max(0, Math.abs(cy) - hh);
-    return dx * dx + dy * dy <= R * R;
-  }
-
-  // "T" glyph (thick stem, simple strokes)
-  const thick = Math.max(2, Math.round(size * 0.10));
-  const barY  = Math.round(size * 0.26);
+  // ── Glyph: bold "T" centred in the inner 60% (safe zone) ──────────────────
+  const thick = Math.max(2, Math.round(size * 0.12));
+  const barY  = Math.round(size * 0.32);      // top bar top edge
   const barH  = thick;
-  const barX1 = Math.round(size * 0.22);
-  const barX2 = Math.round(size * 0.78);
+  const barX1 = Math.round(size * 0.28);
+  const barX2 = Math.round(size * 0.72);
   const stemX1 = Math.round(size / 2 - thick / 2);
   const stemX2 = Math.round(size / 2 + thick / 2);
   const stemY1 = barY + barH;
-  const stemY2 = Math.round(size * 0.76);
+  const stemY2 = Math.round(size * 0.72);
 
   function isGlyph(x, y) {
     if (y >= barY && y < barY + barH && x >= barX1 && x < barX2) return true;
@@ -82,25 +76,23 @@ function buildPNG(size) {
     return false;
   }
 
-  // Build raw RGBA rows
-  const rowBytes = 1 + size * 4; // filter + RGBA per pixel
+  // ── Build raw RGB rows (no alpha) ─────────────────────────────────────────
+  const rowBytes = 1 + size * 3; // filter byte + RGB per pixel
   const raw = Buffer.alloc(rowBytes * size);
 
   for (let y = 0; y < size; y++) {
-    raw[y * rowBytes] = 0; // filter: None
+    raw[y * rowBytes] = 0; // filter type: None
     const t = y / (size - 1);
     const bgR = Math.round(topR + (botR - topR) * t);
     const bgG = Math.round(topG + (botG - topG) * t);
     const bgB = Math.round(topB + (botB - topB) * t);
 
     for (let x = 0; x < size; x++) {
-      const off = y * rowBytes + 1 + x * 4;
-      if (!isInsideRoundedRect(x, y)) {
-        raw[off] = raw[off+1] = raw[off+2] = 0; raw[off+3] = 0; // transparent
-      } else if (isGlyph(x, y)) {
-        raw[off] = fgR; raw[off+1] = fgG; raw[off+2] = fgB; raw[off+3] = 255;
+      const off = y * rowBytes + 1 + x * 3;
+      if (isGlyph(x, y)) {
+        raw[off] = fgR; raw[off + 1] = fgG; raw[off + 2] = fgB;
       } else {
-        raw[off] = bgR; raw[off+1] = bgG; raw[off+2] = bgB; raw[off+3] = 255;
+        raw[off] = bgR; raw[off + 1] = bgG; raw[off + 2] = bgB;
       }
     }
   }
@@ -119,4 +111,4 @@ function buildPNG(size) {
 const out = path.join(__dirname, "..", "public");
 fs.writeFileSync(path.join(out, "icon-192.png"), buildPNG(192));
 fs.writeFileSync(path.join(out, "icon-512.png"), buildPNG(512));
-console.log("✓ public/icon-192.png and public/icon-512.png created");
+console.log("✓ icon-192.png and icon-512.png created (maskable-safe, full-area fill)");

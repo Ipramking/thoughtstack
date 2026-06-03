@@ -13,6 +13,7 @@ import { Onboarding }                      from "@/components/ui/onboarding";
 import { useAppStore }                     from "@/store/useAppStore";
 import { useOnlineStatus }                 from "@/hooks/useOnlineStatus";
 import { useSyncData }                     from "@/hooks/useSyncData";
+import { useReminderScheduler }            from "@/hooks/useReminderScheduler";
 
 const PUBLIC_PATHS = ["/auth"];
 
@@ -22,7 +23,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const router     = useRouter();
   const isOnline   = useOnlineStatus();
   const { updateProfile } = useAppStore();
-  useSyncData(); // cross-device sync — pull on mount, push on focus/interval
+  useSyncData();             // cross-device sync — pull on mount, push on focus/interval
+  useReminderScheduler();    // re-arm task reminders every 5 min (survives SW restarts)
 
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p));

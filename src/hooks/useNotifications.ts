@@ -29,10 +29,25 @@ export function useNotifications() {
       return false;
     }
 
+    // iOS-specific: web push only works on iOS 16.4+ AND only when the app
+    // has been installed to the home screen as a PWA.
+    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    const isStandalone =
+      window.matchMedia("(display-mode: standalone)").matches ||
+      (navigator as Navigator & { standalone?: boolean }).standalone === true;
+    if (isIOS && !isStandalone) {
+      toast.error("On iOS, install ThoughtStack to your home screen first, then enable notifications from inside the installed app.");
+      return false;
+    }
+
     // Request OS permission
     const permission = await Notification.requestPermission();
     if (permission !== "granted") {
-      toast.error("Notification permission denied");
+      toast.error(
+        permission === "denied"
+          ? "Notifications blocked — enable them in your browser site settings"
+          : "Notification permission was not granted"
+      );
       return false;
     }
 
@@ -106,41 +121,57 @@ export function useNotifications() {
   }, [setPushSubscription, setNotificationsEnabled]);
 
   const sendTestNotification = useCallback(async () => {
-    // Local notification (works without server round-trip)
-    if (Notification.permission === "granted") {
-      if ("serviceWorker" in navigator) {
-        const reg = await navigator.serviceWorker.ready;
-        await reg.showNotification("ThoughtStack 🧠", {
-          body: "Notifications are working! You'll see task reminders here.",
-          icon: "/icon-192.png",
-          badge: "/icon-192.png",
-        });
-        toast.success("Test notification sent!");
-        return;
-      }
-    }
-
-    // Fallback: server-sent push
-    if (!pushSubscription) {
+    if (Notification.permission !== "granted") {
       toast.error("Enable notifications first");
       return;
     }
-    try {
-      await fetch("/api/push/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          subscription: JSON.parse(pushSubscription),
-          title: "ThoughtStack 🧠",
-          body: "Notifications are working! You'll get task reminders here.",
-          url: "/",
-        }),
+
+    // If we have a push subscription, test the FULL server → push → SW pipeline.
+    // This is what really matters — local SW notifications work always but
+    // server push is what delivers reminders when the app is closed.
+    if (pushSubscription) {
+      try {
+        const res = await fetch("/api/push/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            subscription: JSON.parse(pushSubscription),
+            title: "ThoughtStack 🧠",
+            body: "Push delivery is working — you'll get reminders even when the app is closed.",
+            url: "/",
+          }),
+        });
+        if (res.ok) {
+          toast.success("Push notification sent — check your notification tray");
+          return;
+        }
+        const data = await res.json().catch(() => ({} as { error?: string }));
+        if (res.status === 410 || res.status === 404) {
+          // Subscription is gone — clear it and tell the user to re-enable
+          setPushSubscription(null);
+          toast.error("Push subscription expired — re-enable notifications");
+          return;
+        }
+        console.warn("[Push] Send failed:", data);
+        toast.error(`Push failed: ${data.error ?? "server error"} — falling back to local`);
+      } catch {
+        toast.error("Network error sending push — falling back to local");
+      }
+    }
+
+    // Local fallback (SW.showNotification directly, no server round-trip)
+    if ("serviceWorker" in navigator) {
+      const reg = await navigator.serviceWorker.ready;
+      await reg.showNotification("ThoughtStack 🧠", {
+        body: pushSubscription
+          ? "Local fallback — push delivery isn't working but local notifications are."
+          : "Notifications are working! (Local-only mode — install as PWA for background delivery.)",
+        icon: "/icon-192.png",
+        badge: "/icon-192.png",
       });
       toast.success("Test notification sent!");
-    } catch {
-      toast.error("Failed to send test notification");
     }
-  }, [pushSubscription]);
+  }, [pushSubscription, setPushSubscription]);
 
   const scheduleReminder = useCallback(
     async (taskId: string, taskTitle: string, dueDate: string, dueTime?: string) => {
