@@ -45,7 +45,7 @@ const DEFAULT_FORM: TaskFormData = {
 
 export default function TasksPage() {
   const { tasks, addTask, updateTask, deleteTask, completeTask, addSubtask, toggleSubtask, deleteSubtask, toggleThoughtsPanel } = useAppStore();
-  const { notificationsEnabled, requestPermission, scheduleReminder } = useNotifications();
+  const { notificationsEnabled, requestPermission, scheduleReminder, cancelReminder } = useNotifications();
   const { loading: geoLoading, getLocation, openInMaps } = useGeolocation();
 
   const [search,         setSearch]     = useState("");
@@ -185,9 +185,9 @@ export default function TasksPage() {
               ) : list.map((task) => (
                 <TaskRow
                   key={task.id} task={task}
-                  onToggle={() => completeTask(task.id)}
+                  onToggle={() => { completeTask(task.id); cancelReminder(task.id); }}
                   onEdit={() => openEdit(task)}
-                  onDelete={() => deleteTask(task.id)}
+                  onDelete={() => { deleteTask(task.id); cancelReminder(task.id); }}
                   onMapOpen={(loc) => openInMaps(loc)}
                   onAddSubtask={(title) => addSubtask(task.id, title)}
                   onToggleSubtask={(stId) => toggleSubtask(task.id, stId)}

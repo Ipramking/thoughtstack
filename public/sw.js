@@ -1,4 +1,4 @@
-// ThoughtStack Service Worker — v14
+// ThoughtStack Service Worker — v15
 //
 // KEY FIXES:
 // 1. Vercel/Next.js sends "Cache-Control: no-store" on SSR pages. Chrome's
@@ -11,7 +11,7 @@
 // 4. Version bumped to v14 so browsers that cached a broken older build
 //    immediately detect the new file and re-install the worker.
 
-const VERSION = "thoughtstack-v14";
+const VERSION = "thoughtstack-v15";
 const CACHE   = VERSION;
 
 // Only truly static assets that have no auth requirement
@@ -211,11 +211,14 @@ self.addEventListener("fetch", (e) => {
 });
 
 // ── Push notifications ────────────────────────────────────────────────────────
+// Server (cron) push lands here. Notification `tag` matches task id so this
+// REPLACES any local SW-setTimeout notification for the same task → user sees
+// exactly one notification, never two.
 self.addEventListener("push", (e) => {
   if (!e.data) return;
   let data = {};
   try { data = e.data.json(); } catch { data = { title: "ThoughtStack", body: e.data.text() }; }
-  const { title = "ThoughtStack 🧠", body = "", url = "/" } = data;
+  const { title = "ThoughtStack 🧠", body = "", url = "/", tag } = data;
 
   e.waitUntil(
     self.registration.showNotification(title, {
@@ -223,6 +226,8 @@ self.addEventListener("push", (e) => {
       icon:    "/icon-192.png",
       badge:   "/icon-192.png",
       vibrate: [100, 50, 100],
+      tag:     tag || undefined,   // dedupes with local-scheduled reminder
+      renotify: !!tag,             // re-alert even when replacing a stale tag
       data:    { url },
       actions: [
         { action: "open",    title: "Open"    },
@@ -267,6 +272,8 @@ self.addEventListener("message", (e) => {
         icon:    "/icon-192.png",
         badge:   "/icon-192.png",
         vibrate: [200, 100, 200],
+        tag:     id,         // shared with server push so only one notification shows
+        renotify: true,
         data:    { url: url ?? "/tasks" },
         actions: [{ action: "open", title: "View task" }],
       });
