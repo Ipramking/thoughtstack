@@ -1,16 +1,17 @@
-// ThoughtStack Service Worker — v13
+// ThoughtStack Service Worker — v14
 //
-// KEY FIX: Vercel/Next.js sends "Cache-Control: no-store" on SSR pages.
-// Chrome's Cache Storage API rejects no-store responses entirely — so
-// cache.put() was silently failing and the offline cache was always empty.
-// We now clone the response, strip the no-store directive, and store a
-// plain copy with just Content-Type preserved.
-//
-// Also removed PRECACHE_PAGES: fetching authenticated routes at install time
-// has no session cookie → gets redirected to /auth → would have cached
-// the wrong page for each route. Pages now cache naturally as the user browses.
+// KEY FIXES:
+// 1. Vercel/Next.js sends "Cache-Control: no-store" on SSR pages. Chrome's
+//    Cache Storage API refuses to store no-store responses (throws TypeError).
+//    cacheResponse() strips no-store before calling cache.put().
+// 2. chrome-extension:// URLs are bailed out before ANY URL parsing
+//    so they never reach cache.put() at all.
+// 3. PRECACHE_PAGES removed — fetching auth-gated routes at install has no
+//    session cookie, follows redirect to /auth, would cache the wrong page.
+// 4. Version bumped to v14 so browsers that cached a broken older build
+//    immediately detect the new file and re-install the worker.
 
-const VERSION = "thoughtstack-v13";
+const VERSION = "thoughtstack-v14";
 const CACHE   = VERSION;
 
 // Only truly static assets that have no auth requirement

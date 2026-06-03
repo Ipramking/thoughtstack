@@ -1,7 +1,7 @@
 "use client";
 
 import { useTheme }    from "next-themes";
-import { Sun, Moon, Trash2, Bell, CheckCircle2, Check, FlaskConical, Download, Upload } from "lucide-react";
+import { Sun, Moon, Trash2, Bell, CheckCircle2, Check, FlaskConical, Download, Upload, RefreshCw } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { Card, CardContent, CardHeader, CardDescription } from "@/components/ui/card";
 import { Button }      from "@/components/ui/button";
@@ -9,7 +9,7 @@ import { PageHeader }  from "@/components/ui/page-header";
 import { cn }          from "@/lib/utils";
 import { toast }       from "@/hooks/useToast";
 import { useNotifications } from "@/hooks/useNotifications";
-import { useRef }      from "react";
+import { useRef, useState } from "react";
 
 function Row({ label, description, action }: { label: string; description?: string; action: React.ReactNode }) {
   return (
@@ -32,6 +32,28 @@ export default function SettingsPage() {
   const { tasks, journals, events }  = useAppStore();
   const { notificationsEnabled, requestPermission, disableNotifications, sendTestNotification } = useNotifications();
   const restoreRef = useRef<HTMLInputElement>(null);
+  const [nuking, setNuking] = useState(false);
+
+  async function handleNukeCache() {
+    setNuking(true);
+    try {
+      // 1. Unregister all service workers
+      if ("serviceWorker" in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map((r) => r.unregister()));
+      }
+      // 2. Delete all Cache Storage entries
+      if ("caches" in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((k) => caches.delete(k)));
+      }
+      toast.success("Cache cleared — reloading…");
+      setTimeout(() => window.location.reload(), 800);
+    } catch {
+      toast.error("Couldn't clear cache — try a hard reload (Ctrl+Shift+R)");
+      setNuking(false);
+    }
+  }
 
   function handleBackup() {
     const state = useAppStore.getState();
@@ -245,6 +267,29 @@ export default function SettingsPage() {
                     <Upload className="w-3.5 h-3.5" /> Restore
                   </Button>
                 </>
+              }
+            />
+          </CardContent></Card>
+        </div>
+
+        {/* Troubleshooting */}
+        <div className="space-y-2">
+          <Section>Troubleshooting</Section>
+          <Card><CardContent className="p-5 space-y-0 divide-y divide-border/60">
+            <Row
+              label="Clear app cache & reload"
+              description="Fixes stale pages, broken chunks, and service worker errors. Your data is safe — this only clears the browser cache."
+              action={
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-xl gap-1.5"
+                  onClick={handleNukeCache}
+                  disabled={nuking}
+                >
+                  <RefreshCw className={cn("w-3.5 h-3.5", nuking && "animate-spin")} />
+                  {nuking ? "Clearing…" : "Clear & reload"}
+                </Button>
               }
             />
           </CardContent></Card>
