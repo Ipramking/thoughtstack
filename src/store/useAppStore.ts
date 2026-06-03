@@ -1,13 +1,58 @@
 "use client";
 
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { persist, createJSONStorage, StateStorage } from "zustand/middleware";
 import {
   Task, JournalEntry, CalendarEvent,
   ThoughtsMessage, UserProfile, DailyStats, Recurrence, Subtask,
 } from "@/types";
 import { generateId } from "@/lib/utils";
 import { format, addDays, addWeeks, addMonths, subDays } from "date-fns";
+
+// ── Throttled localStorage ────────────────────────────────────────────────────
+// Default zustand persist writes to localStorage synchronously on EVERY state
+// change. With thousands of tasks (legacy duplication bug), JSON.stringify
+// alone took 200–500 ms per call, blocking the main thread on every click.
+// This wrapper batches writes — at most one localStorage.setItem call per
+// 800 ms, with a flush on page unload to avoid losing the latest state.
+const pendingWrites = new Map<string, string>();
+let writeTimer: ReturnType<typeof setTimeout> | null = null;
+
+function flushPendingWrites() {
+  if (typeof window === "undefined") return;
+  for (const [key, value] of pendingWrites) {
+    try { window.localStorage.setItem(key, value); } catch {/* quota / disabled */}
+  }
+  pendingWrites.clear();
+  writeTimer = null;
+}
+
+if (typeof window !== "undefined") {
+  // Flush whatever's pending when the tab is hidden or closed
+  window.addEventListener("pagehide",         flushPendingWrites);
+  window.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") flushPendingWrites();
+  });
+}
+
+const throttledLocalStorage: StateStorage = {
+  getItem: (name) => {
+    if (typeof window === "undefined") return null;
+    // If we have a pending write, return that (more up-to-date than localStorage)
+    return pendingWrites.get(name) ?? window.localStorage.getItem(name);
+  },
+  setItem: (name, value) => {
+    pendingWrites.set(name, value);
+    if (writeTimer) return;
+    writeTimer = setTimeout(flushPendingWrites, 800);
+  },
+  removeItem: (name) => {
+    pendingWrites.delete(name);
+    if (typeof window !== "undefined") {
+      try { window.localStorage.removeItem(name); } catch {/* ignore */}
+    }
+  },
+};
 
 const now   = () => new Date().toISOString();
 const today = () => format(new Date(), "yyyy-MM-dd");
@@ -320,10 +365,11 @@ export const useAppStore = create<AppState>()(
       setNotificationsEnabled: (v) => set({ notificationsEnabled: v }),
     }),
     {
-      name: "thoughtstack-storage",
+      name:    "thoughtstack-storage",
+      storage: createJSONStorage(() => throttledLocalStorage),
       partialize: (s) => ({
         profile: s.profile, tasks: s.tasks, journals: s.journals,
-        events: s.events, messages: s.messages, dailyStats: s.dailyStats,
+        events: s.events, messages: s.messages.slice(-50), dailyStats: s.dailyStats,
         pushSubscription: s.pushSubscription, sidebarCollapsed: s.sidebarCollapsed,
         onboarded: s.onboarded, notificationsEnabled: s.notificationsEnabled,
         pendingDeletes: s.pendingDeletes,

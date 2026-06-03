@@ -12,6 +12,7 @@ const PUBLIC_PREFIXES = [
                 // NextAuth session, etc). Putting middleware in front of every
                 // API call broke /sw.js, /manifest.json, AND /api/cron/* before.
   "/offline",
+  "/reset",    // emergency rescue page — must be reachable even if app frozen
   "/_next",
   "/favicon",
 ];

@@ -15,7 +15,9 @@ import { useOnlineStatus }                 from "@/hooks/useOnlineStatus";
 import { useSyncData }                     from "@/hooks/useSyncData";
 import { useReminderScheduler }            from "@/hooks/useReminderScheduler";
 
-const PUBLIC_PATHS = ["/auth"];
+// Routes that completely bypass the app shell (no sidebar, no sync hooks, no anything).
+// /reset must work even when the rest of the app is frozen — it's the rescue route.
+const PUBLIC_PATHS = ["/auth", "/reset"];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { data: session, status } = useSession();
