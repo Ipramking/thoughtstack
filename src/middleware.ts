@@ -5,7 +5,7 @@ import { authConfig } from "@/auth.config";
 // The middleware only needs to verify the JWT, not run the credentials check.
 const { auth } = NextAuth(authConfig);
 
-const PUBLIC = ["/auth", "/api/auth"];
+const PUBLIC = ["/auth", "/api/auth", "/offline"];
 
 export default auth((req) => {
   const { pathname } = req.nextUrl;
@@ -25,8 +25,21 @@ export default auth((req) => {
   }
 });
 
+// ── Matcher ────────────────────────────────────────────────────────────────────
+// CRITICAL: this MUST exclude ALL static files served from /public/, otherwise
+// the browser tries to fetch /sw.js, gets redirected to /auth, receives HTML,
+// and the service worker can never install. Same for /manifest.json and icons.
+//
+// The pattern below excludes:
+//   - Next.js internals (_next/static, _next/image)
+//   - All API routes (handled separately by NextAuth)
+//   - Anything with a file extension (e.g. /sw.js, /manifest.json, /icon-192.png,
+//     /favicon.ico, /robots.txt, etc.) — these are served from /public/.
+//
+// Without the trailing `\\.[\\w]+$` exclusion, the middleware was hijacking
+// /sw.js requests and returning HTML, breaking the entire PWA install path.
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!api|_next/static|_next/image|.*\\.[\\w]+$).*)",
   ],
 };
