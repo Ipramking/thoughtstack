@@ -1,52 +1,64 @@
-// ThoughtStack Service Worker — v12
-// Strategy:
-//  - HTML pages → network-first + cache; offline = serve cached page or app-shell
-//  - /_next/static/ → cache-first (immutable hashed chunks)
-//  - /api/auth/session → network-first + cache (offline auth bypass)
-//  - other /api/ → network only (never cache)
-//  - images / manifest → stale-while-revalidate
-//  - chrome-extension / data / blob → bailed out early
+// ThoughtStack Service Worker — v13
+//
+// KEY FIX: Vercel/Next.js sends "Cache-Control: no-store" on SSR pages.
+// Chrome's Cache Storage API rejects no-store responses entirely — so
+// cache.put() was silently failing and the offline cache was always empty.
+// We now clone the response, strip the no-store directive, and store a
+// plain copy with just Content-Type preserved.
+//
+// Also removed PRECACHE_PAGES: fetching authenticated routes at install time
+// has no session cookie → gets redirected to /auth → would have cached
+// the wrong page for each route. Pages now cache naturally as the user browses.
 
-const VERSION = "thoughtstack-v12";
+const VERSION = "thoughtstack-v13";
 const CACHE   = VERSION;
 
-// Pre-cache app shell + offline fallback + static assets
-// Wrapped in a nested addAll so a single 404 doesn't break the whole install.
-const PRECACHE_SHELL = [
+// Only truly static assets that have no auth requirement
+const PRECACHE = [
   "/offline",
   "/icon-192.png",
   "/icon-512.png",
   "/manifest.json",
 ];
 
-// Main app routes — cached so offline navigation works.
-// Each fetch is wrapped separately so one failure doesn't kill the rest.
-const PRECACHE_PAGES = [
-  "/",
-  "/tasks",
-  "/journal",
-  "/calendar",
-  "/profile",
-  "/settings",
-];
-
-// In-memory scheduled reminders (cleared on SW restart, which is acceptable)
 const reminders = new Map();
+
+// ── Helper: cache a response, stripping no-store if present ──────────────────
+async function cacheResponse(cache, request, response) {
+  if (!response || !response.ok) return;
+
+  const cc = response.headers.get("cache-control") ?? "";
+
+  let toCache;
+  if (cc.includes("no-store")) {
+    // Chrome refuses to store no-store responses in Cache Storage (throws TypeError).
+    // Create a minimal copy with body + content-type so offline rendering works.
+    try {
+      const body = await response.clone().blob();
+      toCache = new Response(body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: {
+          "content-type": response.headers.get("content-type") ?? "text/html; charset=utf-8",
+          "x-sw-cached-at": new Date().toISOString(),
+        },
+      });
+    } catch {
+      return; // can't read body — skip
+    }
+  } else {
+    toCache = response.clone();
+  }
+
+  await cache.put(request, toCache).catch(() => {/* silent */});
+}
 
 // ── Install ────────────────────────────────────────────────────────────────────
 self.addEventListener("install", (e) => {
   e.waitUntil(
-    caches.open(CACHE).then(async (cache) => {
-      // Critical shell assets — must succeed
-      await cache.addAll(PRECACHE_SHELL).catch(() => {});
-
-      // App pages — best-effort (might fail if offline at install time)
-      await Promise.allSettled(
-        PRECACHE_PAGES.map((url) =>
-          cache.add(url).catch(() => {/* ignore individual failures */})
-        )
-      );
-    }).then(() => self.skipWaiting())
+    caches.open(CACHE)
+      .then((c) => c.addAll(PRECACHE).catch(() => {}))
+      .then(() => self.skipWaiting())
   );
 });
 
@@ -54,9 +66,9 @@ self.addEventListener("install", (e) => {
 self.addEventListener("activate", (e) => {
   e.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(
-        keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))
-      ))
+      .then((keys) =>
+        Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
+      )
       .then(() => self.clients.claim())
       .then(() =>
         self.clients
@@ -70,18 +82,15 @@ self.addEventListener("activate", (e) => {
   );
 });
 
-// ── Fetch strategy ────────────────────────────────────────────────────────────
+// ── Fetch ─────────────────────────────────────────────────────────────────────
 self.addEventListener("fetch", (e) => {
   const { request } = e;
 
   // Only intercept GET
   if (request.method !== "GET") return;
 
-  // Bail on non-HTTP schemes early — before parsing URL (avoids chrome-extension errors)
-  if (
-    !request.url.startsWith("http://") &&
-    !request.url.startsWith("https://")
-  ) return;
+  // Bail on non-HTTP schemes before URL parsing (avoids chrome-extension errors)
+  if (!request.url.startsWith("http://") && !request.url.startsWith("https://")) return;
 
   let url;
   try { url = new URL(request.url); } catch { return; }
@@ -89,7 +98,7 @@ self.addEventListener("fetch", (e) => {
   // Only handle same-origin requests
   if (url.origin !== self.location.origin) return;
 
-  // ── 1. Next.js static chunks — cache-first (hash-named, immutable) ───────────
+  // ── 1. Next.js static chunks — cache-first (immutable hashed filenames) ──────
   if (url.pathname.startsWith("/_next/static/")) {
     e.respondWith(
       caches.open(CACHE).then(async (cache) => {
@@ -97,7 +106,7 @@ self.addEventListener("fetch", (e) => {
         if (cached) return cached;
         try {
           const fresh = await fetch(request);
-          if (fresh.ok) cache.put(request, fresh.clone());
+          await cacheResponse(cache, request, fresh);
           return fresh;
         } catch {
           return new Response("Network error", { status: 503 });
@@ -107,13 +116,14 @@ self.addEventListener("fetch", (e) => {
     return;
   }
 
-  // ── 2. Auth session — network-first, cache fallback ──────────────────────────
+  // ── 2. Auth session — network-first, cache fallback ───────────────────────────
   if (url.pathname === "/api/auth/session") {
     e.respondWith(
       fetch(request)
-        .then((res) => {
+        .then(async (res) => {
           if (res.ok) {
-            caches.open(CACHE).then((c) => c.put(request, res.clone()));
+            const cache = await caches.open(CACHE);
+            await cacheResponse(cache, request, res);
           }
           return res;
         })
@@ -121,16 +131,14 @@ self.addEventListener("fetch", (e) => {
           const cached = await caches.match(request);
           return (
             cached ??
-            new Response("null", {
-              headers: { "Content-Type": "application/json" },
-            })
+            new Response("null", { headers: { "Content-Type": "application/json" } })
           );
         })
     );
     return;
   }
 
-  // ── 3. Other API routes — network only (never cache) ─────────────────────────
+  // ── 3. Other API routes — network only ───────────────────────────────────────
   if (url.pathname.startsWith("/api/")) return;
 
   // ── 4. Static assets — stale-while-revalidate ────────────────────────────────
@@ -146,47 +154,43 @@ self.addEventListener("fetch", (e) => {
     e.respondWith(
       caches.open(CACHE).then(async (cache) => {
         const cached = await cache.match(request);
-        const fetchPromise = fetch(request)
-          .then((res) => {
-            if (res.ok) cache.put(request, res.clone());
-            return res;
-          })
-          .catch(() => cached ?? new Response("Not found", { status: 404 }));
+        const fetchPromise = fetch(request).then(async (res) => {
+          await cacheResponse(cache, request, res);
+          return res;
+        }).catch(() => cached ?? new Response("Not found", { status: 404 }));
         return cached || fetchPromise;
       })
     );
     return;
   }
 
-  // ── 5. HTML pages — NETWORK-FIRST with offline cache fallback ────────────────
+  // ── 5. HTML / navigation — network-first, serve cached copy offline ────────────
   //
-  // This is the key change from v10/v11. We now:
-  //   a) Try the network and cache the fresh response
-  //   b) On failure: serve the cached version of this exact URL
-  //   c) Fall back to cached "/" (app shell that Next.js router can handle)
-  //   d) Last resort: serve /offline
+  // Online:  fetch fresh → strip no-store → store in cache → return to browser
+  // Offline: serve cached copy of this exact URL
+  //          → fall back to cached "/" (app shell; Next.js router handles routing)
+  //          → last resort: /offline page
   //
-  // This means tasks/journal/etc work offline as long as the user visited them online.
+  // This is the key offline-capable strategy. Pages get cached as the user browses
+  // while online. Authentication-gated pages only cache AFTER the user has logged in.
   if (request.mode === "navigate" || request.destination === "document") {
     e.respondWith(
       caches.open(CACHE).then(async (cache) => {
         try {
           const fresh = await fetch(request);
-          if (fresh.ok) {
-            // Cache this page for offline use
-            cache.put(request, fresh.clone());
-          }
+          // Cache regardless of Cache-Control: no-store (our helper strips it)
+          await cacheResponse(cache, request, fresh);
           return fresh;
         } catch {
-          // Offline path — check caches in priority order
+          // ── Offline fallback chain ──────────────────────────────────────────
           const cached = await cache.match(request);
           if (cached) return cached;
 
-          // App-shell fallback: "/" handles all client-side routing
+          // Try the root as a generic app shell (client-side router takes over)
           const shell = await cache.match(new Request("/"));
           if (shell) return shell;
 
-          // Last resort
+          // True last resort
           const offlinePage = await caches.match("/offline");
           return (
             offlinePage ??
@@ -201,21 +205,15 @@ self.addEventListener("fetch", (e) => {
     return;
   }
 
-  // ── 6. Everything else (fonts, etc.) — network only ──────────────────────────
-  e.respondWith(
-    fetch(request).catch(() => new Response("", { status: 504 }))
-  );
+  // ── 6. Everything else — network only ────────────────────────────────────────
+  e.respondWith(fetch(request).catch(() => new Response("", { status: 504 })));
 });
 
 // ── Push notifications ────────────────────────────────────────────────────────
 self.addEventListener("push", (e) => {
   if (!e.data) return;
   let data = {};
-  try {
-    data = e.data.json();
-  } catch {
-    data = { title: "ThoughtStack", body: e.data.text() };
-  }
+  try { data = e.data.json(); } catch { data = { title: "ThoughtStack", body: e.data.text() }; }
   const { title = "ThoughtStack 🧠", body = "", url = "/" } = data;
 
   e.waitUntil(
@@ -243,15 +241,9 @@ self.addEventListener("notificationclick", (e) => {
     self.clients
       .matchAll({ type: "window", includeUncontrolled: true })
       .then((clients) => {
-        const existing = clients.find((c) =>
-          c.url.includes(self.location.origin)
-        );
-        if (existing) {
-          existing.focus();
-          existing.navigate(target);
-        } else {
-          self.clients.openWindow(target);
-        }
+        const existing = clients.find((c) => c.url.includes(self.location.origin));
+        if (existing) { existing.focus(); existing.navigate(target); }
+        else self.clients.openWindow(target);
       })
   );
 });
@@ -260,10 +252,7 @@ self.addEventListener("notificationclick", (e) => {
 self.addEventListener("message", (e) => {
   const { type, payload } = e.data ?? {};
 
-  if (type === "SKIP_WAITING") {
-    self.skipWaiting();
-    return;
-  }
+  if (type === "SKIP_WAITING") { self.skipWaiting(); return; }
 
   if (type === "SCHEDULE_REMINDER") {
     const { id, title, body, dueAt, url } = payload;
@@ -289,9 +278,6 @@ self.addEventListener("message", (e) => {
 
   if (type === "CANCEL_REMINDER") {
     const { id } = payload ?? {};
-    if (reminders.has(id)) {
-      clearTimeout(reminders.get(id).timerId);
-      reminders.delete(id);
-    }
+    if (reminders.has(id)) { clearTimeout(reminders.get(id).timerId); reminders.delete(id); }
   }
 });
