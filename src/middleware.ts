@@ -1,21 +1,29 @@
 import NextAuth from "next-auth";
 import { authConfig } from "@/auth.config";
 
-// Use the EDGE-SAFE config — no bcrypt, no Neon, no Node.js APIs.
-// The middleware only needs to verify the JWT, not run the credentials check.
+// Edge-safe NextAuth config — JWT verification only, no Node-only APIs.
 const { auth } = NextAuth(authConfig);
 
-const PUBLIC = ["/auth", "/api/auth", "/offline"];
+// Routes that never require a session
+const PUBLIC_PREFIXES = [
+  "/auth",
+  "/api/",     // ALL api routes are public at the middleware level.
+                // Each route handler does its own auth check (e.g. CRON_SECRET,
+                // NextAuth session, etc). Putting middleware in front of every
+                // API call broke /sw.js, /manifest.json, AND /api/cron/* before.
+  "/offline",
+  "/_next",
+  "/favicon",
+];
 
 export default auth((req) => {
   const { pathname } = req.nextUrl;
 
-  const isPublic =
-    PUBLIC.some((p) => pathname.startsWith(p)) ||
-    pathname.startsWith("/_next") ||
-    pathname.startsWith("/favicon");
-
-  if (isPublic) return;
+  // Belt-and-braces: even if the matcher misses something, never redirect
+  // public paths. The matcher regex has bitten us multiple times.
+  if (PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(p))) {
+    return;
+  }
 
   if (!req.auth) {
     const loginUrl = req.nextUrl.clone();
@@ -25,21 +33,11 @@ export default auth((req) => {
   }
 });
 
-// ── Matcher ────────────────────────────────────────────────────────────────────
-// CRITICAL: this MUST exclude ALL static files served from /public/, otherwise
-// the browser tries to fetch /sw.js, gets redirected to /auth, receives HTML,
-// and the service worker can never install. Same for /manifest.json and icons.
-//
-// The pattern below excludes:
-//   - Next.js internals (_next/static, _next/image)
-//   - All API routes (handled separately by NextAuth)
-//   - Anything with a file extension (e.g. /sw.js, /manifest.json, /icon-192.png,
-//     /favicon.ico, /robots.txt, etc.) — these are served from /public/.
-//
-// Without the trailing `\\.[\\w]+$` exclusion, the middleware was hijacking
-// /sw.js requests and returning HTML, breaking the entire PWA install path.
+// Matcher excludes static files (anything ending in a file extension) AND
+// the api/_next/favicon prefixes. The in-function check above is the safety
+// belt in case the regex misses something — we've been burned twice now.
 export const config = {
   matcher: [
-    "/((?!api|_next/static|_next/image|.*\\.[\\w]+$).*)",
+    "/((?!api|_next|favicon|.*\\.[\\w]+$).*)",
   ],
 };
