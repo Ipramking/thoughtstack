@@ -4,11 +4,17 @@ import { useCallback } from "react";
 import { useAppStore } from "@/store/useAppStore";
 import { toast } from "@/hooks/useToast";
 
-function urlBase64ToUint8Array(base64: string): Uint8Array {
+// Returns a fresh ArrayBuffer (not ArrayBufferLike) so the result satisfies
+// PushManager.subscribe's `applicationServerKey: BufferSource` constraint
+// under Next.js 15's stricter TS lib types.
+function urlBase64ToUint8Array(base64: string): ArrayBuffer {
   const pad = "=".repeat((4 - (base64.length % 4)) % 4);
   const b64 = (base64 + pad).replace(/-/g, "+").replace(/_/g, "/");
   const raw = atob(b64);
-  return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
+  const buf = new ArrayBuffer(raw.length);
+  const view = new Uint8Array(buf);
+  for (let i = 0; i < raw.length; i++) view[i] = raw.charCodeAt(i);
+  return buf;
 }
 
 export function useNotifications() {
