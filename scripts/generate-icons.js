@@ -54,21 +54,29 @@ function buildPNG(size) {
   ihdr[9] = 2; // RGB (color type 2)
   ihdr[10] = 0; ihdr[11] = 0; ihdr[12] = 0;
 
-  // Brand gradient: top = #7c3aed (purple-600), bottom = #4f46e5 (indigo-600)
-  const topR = 124, topG = 58,  topB = 237;
-  const botR = 79,  botG = 70,  botB = 229;
-  const fgR  = 255, fgG  = 255, fgB  = 255;
+  // ── Palette ───────────────────────────────────────────────────────────────
+  // Background: subtle dark gradient that matches the app's #0d0d0d theme.
+  // Top edge slightly lifted (#1a1a1a) for depth, bottom is the app's bg.
+  const topR = 26,  topG = 26,  topB = 30;     // #1a1a1e
+  const botR = 13,  botG = 13,  botB = 13;     // #0d0d0d
 
-  // ── Glyph: bold "T" centred in the inner 60% (safe zone) ──────────────────
-  const thick = Math.max(2, Math.round(size * 0.12));
-  const barY  = Math.round(size * 0.32);      // top bar top edge
+  // T glyph: vibrant violet — matches the brand purple-600 accent used in
+  // the AI panel, but on a dark canvas instead of competing with one.
+  const fgR  = 167, fgG  = 139, fgB  = 250;    // #a78bfa (violet-400)
+
+  // Subtle radial glow behind the T for depth — tiny lift towards violet.
+  const glowR = 109, glowG = 40, glowB = 217;  // #6d28d9 (violet-700)
+
+  // ── Glyph: bold "T" centred in the inner 60% (maskable safe zone) ─────────
+  const thick = Math.max(2, Math.round(size * 0.13));
+  const barY  = Math.round(size * 0.30);
   const barH  = thick;
-  const barX1 = Math.round(size * 0.28);
-  const barX2 = Math.round(size * 0.72);
+  const barX1 = Math.round(size * 0.27);
+  const barX2 = Math.round(size * 0.73);
   const stemX1 = Math.round(size / 2 - thick / 2);
   const stemX2 = Math.round(size / 2 + thick / 2);
   const stemY1 = barY + barH;
-  const stemY2 = Math.round(size * 0.72);
+  const stemY2 = Math.round(size * 0.73);
 
   function isGlyph(x, y) {
     if (y >= barY && y < barY + barH && x >= barX1 && x < barX2) return true;
@@ -76,24 +84,42 @@ function buildPNG(size) {
     return false;
   }
 
+  // Radial glow strength at (x, y) — peaks at the centre, fades out.
+  const cx = size / 2, cy = size / 2;
+  const glowRadius = size * 0.4;
+  function glowAt(x, y) {
+    const dx = x - cx, dy = y - cy;
+    const d  = Math.sqrt(dx * dx + dy * dy);
+    if (d >= glowRadius) return 0;
+    // Quadratic falloff, max 0.18 (subtle)
+    const t = 1 - d / glowRadius;
+    return t * t * 0.18;
+  }
+
   // ── Build raw RGB rows (no alpha) ─────────────────────────────────────────
-  const rowBytes = 1 + size * 3; // filter byte + RGB per pixel
+  const rowBytes = 1 + size * 3;
   const raw = Buffer.alloc(rowBytes * size);
 
   for (let y = 0; y < size; y++) {
     raw[y * rowBytes] = 0; // filter type: None
-    const t = y / (size - 1);
-    const bgR = Math.round(topR + (botR - topR) * t);
-    const bgG = Math.round(topG + (botG - topG) * t);
-    const bgB = Math.round(topB + (botB - topB) * t);
+    const ty = y / (size - 1);
+    const bgR = Math.round(topR + (botR - topR) * ty);
+    const bgG = Math.round(topG + (botG - topG) * ty);
+    const bgB = Math.round(topB + (botB - topB) * ty);
 
     for (let x = 0; x < size; x++) {
       const off = y * rowBytes + 1 + x * 3;
+
       if (isGlyph(x, y)) {
         raw[off] = fgR; raw[off + 1] = fgG; raw[off + 2] = fgB;
-      } else {
-        raw[off] = bgR; raw[off + 1] = bgG; raw[off + 2] = bgB;
+        continue;
       }
+
+      // Mix in a subtle violet glow at the centre
+      const g = glowAt(x, y);
+      raw[off]     = Math.round(bgR + (glowR - bgR) * g);
+      raw[off + 1] = Math.round(bgG + (glowG - bgG) * g);
+      raw[off + 2] = Math.round(bgB + (glowB - bgB) * g);
     }
   }
 
