@@ -27,6 +27,7 @@ export interface Task {
   dueDate?: string;    // YYYY-MM-DD
   dueTime?: string;    // HH:mm
   category?: string;
+  tags?: string[];     // free-form lowercase tags (e.g. "work", "errand")
   reminder?: boolean;
   recurrence?: Recurrence;
   parentId?: string;   // recurring instances link back to origin

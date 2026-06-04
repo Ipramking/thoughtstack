@@ -1,0 +1,23 @@
+name: Send morning briefing
+
+# Daily at 7:30 UTC. Adjust to suit your audience's time zone.
+# UTC 07:30 = WAT 08:30 = ET (winter) 02:30 — change to taste.
+
+on:
+  schedule:
+    - cron: "30 7 * * *"
+  workflow_dispatch:
+
+jobs:
+  morning:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hit /api/cron/morning-briefing
+        run: |
+          response=$(curl -s -o /tmp/body -w "%{http_code}" \
+            "https://thoughtstack-ten.vercel.app/api/cron/morning-briefing?secret=${{ secrets.CRON_SECRET }}")
+          echo "HTTP $response"
+          cat /tmp/body
+          if [ "$response" -lt 200 ] || [ "$response" -ge 300 ]; then
+            exit 1
+          fi

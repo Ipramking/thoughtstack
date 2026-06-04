@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import {
   Plus, Search, CheckCircle2, Circle, Clock,
   Trash2, Edit2, Flame, Calendar, Brain, Filter,
-  MapPin, Repeat, Bell, BellOff, Loader2,
+  MapPin, Repeat, Bell, BellOff, Loader2, Tag, Sparkles,
 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { Task, Priority, Recurrence, Location } from "@/types";
@@ -24,7 +24,6 @@ import { useGeolocation }   from "@/hooks/useGeolocation";
 import { useSwipe }         from "@/hooks/useSwipe";
 import { toast }            from "@/hooks/useToast";
 import { parseTaskInput }   from "@/lib/parse-task-input";
-import { Sparkles }         from "lucide-react";
 
 const PRIORITY_OPTIONS: Priority[]       = ["low", "medium", "high", "critical"];
 const RECURRENCE_OPTIONS: Recurrence[]   = ["none", "daily", "weekdays", "weekly", "monthly"];
@@ -38,12 +37,12 @@ const PRIORITY_STYLES: Record<Priority, { dot: string; badge: string }> = {
 
 interface TaskFormData {
   title: string; description: string; priority: Priority; recurrence: Recurrence;
-  dueDate: string; dueTime: string; category: string; reminder: boolean;
+  dueDate: string; dueTime: string; category: string; tags: string; reminder: boolean;
   location: Location | null;
 }
 const DEFAULT_FORM: TaskFormData = {
   title: "", description: "", priority: "medium", recurrence: "none",
-  dueDate: "", dueTime: "", category: "", reminder: false, location: null,
+  dueDate: "", dueTime: "", category: "", tags: "", reminder: false, location: null,
 };
 
 export default function TasksPage() {
@@ -86,7 +85,8 @@ export default function TasksPage() {
       title: task.title, description: task.description ?? "", priority: task.priority,
       recurrence: task.recurrence ?? "none",
       dueDate: task.dueDate ?? "", dueTime: task.dueTime ?? "",
-      category: task.category ?? "", reminder: task.reminder ?? false,
+      category: task.category ?? "", tags: (task.tags ?? []).join(", "),
+      reminder: task.reminder ?? false,
       location: task.location ?? null,
     });
     setDialogOpen(true);
@@ -94,11 +94,17 @@ export default function TasksPage() {
 
   async function handleSave() {
     if (!form.title.trim()) return;
+    const parsedTags = form.tags
+      .split(/[,\s]+/)
+      .map((t) => t.replace(/^#/, "").trim().toLowerCase())
+      .filter(Boolean);
+
     const payload = {
       title: form.title, description: form.description, priority: form.priority,
       recurrence: form.recurrence !== "none" ? form.recurrence : undefined,
       dueDate: form.dueDate || undefined, dueTime: form.dueTime || undefined,
       category: form.category || undefined, reminder: form.reminder,
+      tags: parsedTags.length ? parsedTags : undefined,
       location: form.location ?? undefined,
     };
     if (editId) {
@@ -243,6 +249,9 @@ export default function TasksPage() {
                     if (parsed.dueTime    && !form.dueTime)              next.dueTime    = parsed.dueTime;
                     if (parsed.priority   && form.priority === "medium") next.priority   = parsed.priority;
                     if (parsed.recurrence && form.recurrence === "none") next.recurrence = parsed.recurrence;
+                    if (parsed.tags && parsed.tags.length && !form.tags.trim()) {
+                      next.tags = parsed.tags.join(", ");
+                    }
                     if (parsed.dueDate || parsed.dueTime) next.reminder = true;
                     if (Object.keys(next).length > 0) {
                       setForm({ ...form, ...next });
@@ -287,6 +296,17 @@ export default function TasksPage() {
                   <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Due time</label>
                   <Input type="time" value={form.dueTime} onChange={(e) => setForm({ ...form, dueTime: e.target.value })} className="rounded-xl" />
                 </div>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1.5 block flex items-center gap-1">
+                  <Tag className="w-3 h-3" /> Tags
+                </label>
+                <Input
+                  placeholder="work, errand, urgent (comma-separated)"
+                  value={form.tags}
+                  onChange={(e) => setForm({ ...form, tags: e.target.value })}
+                  className="rounded-xl"
+                />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -385,6 +405,14 @@ function TaskRow({ task, onToggle, onEdit, onDelete, onMapOpen, onAddSubtask, on
               </span>
             )}
             {task.reminder && <Bell className="w-3 h-3 text-muted-foreground" />}
+            {(task.tags ?? []).slice(0, 3).map((tag) => (
+              <span
+                key={tag}
+                className="text-[10px] px-1.5 py-0.5 rounded-md border border-primary/20 bg-primary/5 text-primary/80 font-medium"
+              >
+                #{tag}
+              </span>
+            ))}
             {task.location && (
               <button onClick={() => onMapOpen(task.location!)} className="text-[10px] text-green-400 flex items-center gap-1 hover:underline">
                 <MapPin className="w-2.5 h-2.5" /> Map

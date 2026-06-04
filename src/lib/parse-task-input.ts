@@ -19,6 +19,7 @@ export interface ParsedTask {
   dueTime?:   string;       // HH:mm (24h)
   priority?:  Priority;
   recurrence?: Recurrence;
+  tags?:      string[];     // lowercase tags from #hashtags
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -163,12 +164,26 @@ function tryParseRecurrence(input: string): { recurrence: Recurrence; remaining:
   return null;
 }
 
+// ── Tag extraction: #work #errand ─────────────────────────────────────────────
+function extractTags(input: string): { tags: string[]; remaining: string } {
+  const tags: string[] = [];
+  const remaining = input.replace(/(?:^|\s)#([a-zA-Z0-9_-]{2,30})/g, (_, tag) => {
+    tags.push(tag.toLowerCase());
+    return " ";
+  });
+  return { tags, remaining: remaining.replace(/\s{2,}/g, " ").trim() };
+}
+
 // ── Main entry point ─────────────────────────────────────────────────────────
 export function parseTaskInput(rawInput: string, baseDate = new Date()): ParsedTask {
   let remaining = rawInput;
   const result: ParsedTask = { title: rawInput };
 
-  // Order matters: pull priority + recurrence first (most distinctive),
+  // Tags first — '#' is a distinctive sigil that won't collide with anything else
+  const tagRes = extractTags(remaining);
+  if (tagRes.tags.length > 0) { result.tags = tagRes.tags; remaining = tagRes.remaining; }
+
+  // Then priority + recurrence (most distinctive forms),
   // then time (often has the "at" word), then date.
   const prio = tryParsePriority(remaining);
   if (prio) { result.priority = prio.priority; remaining = prio.remaining; }
