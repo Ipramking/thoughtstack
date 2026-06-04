@@ -11,12 +11,16 @@
 // 4. Version bumped to v14 so browsers that cached a broken older build
 //    immediately detect the new file and re-install the worker.
 
-const VERSION = "thoughtstack-v15";
+const VERSION = "thoughtstack-v16";
 const CACHE   = VERSION;
 
-// Only truly static assets that have no auth requirement
+// Only truly static assets that have no auth requirement.
+// Authenticated routes are warmed by the client after login (see prefetchAppRoutes
+// in ServiceWorkerRegister.tsx) — they can't be pre-cached at SW install time
+// because there's no session cookie yet.
 const PRECACHE = [
   "/offline",
+  "/auth",                // public auth page — cache so logged-out offline still shows it
   "/icon-192.png",
   "/icon-512.png",
   "/manifest.json",
