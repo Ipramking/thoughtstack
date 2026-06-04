@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import {
   Plus, Search, BookOpen, Edit2, Trash2, Tag, Brain,
   Camera, Sparkles, Loader2, Mic, MicOff, Square,
-  Bold, Italic, List, Heading2, Minus, X, LayoutTemplate, ChevronDown,
+  Bold, Italic, List, Heading2, Minus, X, LayoutTemplate, ChevronDown, Share2,
 } from "lucide-react";
 import { useAppStore }     from "@/store/useAppStore";
 import { JournalEntry, Mood } from "@/types";
@@ -18,6 +18,7 @@ import { MarkdownView }    from "@/components/ui/markdown-view";
 import { cn, formatDate }  from "@/lib/utils";
 import { toast }           from "@/hooks/useToast";
 import { callThoughts }    from "@/lib/thoughts-ai";
+import { share }           from "@/lib/share";
 
 // ── Journal templates ─────────────────────────────────────────────────────────
 const TEMPLATES = [
@@ -591,6 +592,15 @@ function JournalCard({ entry, onEdit, onDelete }: { entry: JournalEntry; onEdit:
           </div>
           <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 ml-2" onClick={(e) => e.stopPropagation()}>
             <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg" onClick={onEdit}><Edit2 className="w-3 h-3" /></Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 rounded-lg"
+              onClick={() => share({ title: entry.title, text: entry.content })}
+              aria-label="Share entry"
+            >
+              <Share2 className="w-3 h-3" />
+            </Button>
             <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg text-destructive hover:text-destructive" onClick={onDelete}><Trash2 className="w-3 h-3" /></Button>
           </div>
         </div>

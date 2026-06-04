@@ -15,6 +15,7 @@ import { useOnlineStatus }                 from "@/hooks/useOnlineStatus";
 import { useSyncData }                     from "@/hooks/useSyncData";
 import { useReminderScheduler }            from "@/hooks/useReminderScheduler";
 import { useKeyboardShortcuts }            from "@/hooks/useKeyboardShortcuts";
+import { useBackgroundSync }               from "@/hooks/useBackgroundSync";
 import { ShortcutsHelp }                   from "@/components/ui/shortcuts-help";
 import { FocusTimerBadge }                 from "@/components/ui/focus-timer";
 
@@ -32,6 +33,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useSyncData();             // periodic background sync (now throttled to 5 min)
   useReminderScheduler();    // re-arm task reminders (every 15 min)
   useKeyboardShortcuts();    // / for AI, Cmd+K for search, T/J/E for new items
+  useBackgroundSync();       // register SyncManager so SW gets a sync event on reconnect
 
   // Emergency safety: if dataset is huge (from the legacy duplication bug),
   // auto-dedupe on first mount so the app doesn't choke loading 10,000+ items.

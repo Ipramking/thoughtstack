@@ -210,6 +210,20 @@ self.addEventListener("fetch", (e) => {
   e.respondWith(fetch(request).catch(() => new Response("", { status: 504 })));
 });
 
+// ── Background Sync ───────────────────────────────────────────────────────────
+// Browsers fire this event when the network returns after an offline period,
+// even if no tab is open. We use it to nudge any open clients to flush queued
+// data. If no client is open the sync is a no-op — the next tab open does it.
+self.addEventListener("sync", (e) => {
+  if (e.tag !== "ts-sync-data") return;
+  e.waitUntil(
+    self.clients.matchAll({ includeUncontrolled: true, type: "window" })
+      .then((clients) => {
+        clients.forEach((c) => c.postMessage({ type: "BACKGROUND_SYNC" }));
+      })
+  );
+});
+
 // ── Push notifications ────────────────────────────────────────────────────────
 // Server (cron) push lands here. Notification `tag` matches task id so this
 // REPLACES any local SW-setTimeout notification for the same task → user sees

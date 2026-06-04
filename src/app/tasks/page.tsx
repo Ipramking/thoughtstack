@@ -24,6 +24,7 @@ import { useGeolocation }   from "@/hooks/useGeolocation";
 import { useSwipe }         from "@/hooks/useSwipe";
 import { toast }            from "@/hooks/useToast";
 import { parseTaskInput }   from "@/lib/parse-task-input";
+import { useFocusTimer }    from "@/hooks/useFocusTimer";
 
 const PRIORITY_OPTIONS: Priority[]       = ["low", "medium", "high", "critical"];
 const RECURRENCE_OPTIONS: Recurrence[]   = ["none", "daily", "weekdays", "weekly", "monthly"];
@@ -49,6 +50,7 @@ export default function TasksPage() {
   const { tasks, addTask, updateTask, deleteTask, completeTask, addSubtask, toggleSubtask, deleteSubtask, toggleThoughtsPanel } = useAppStore();
   const { notificationsEnabled, requestPermission, scheduleReminder, cancelReminder } = useNotifications();
   const { loading: geoLoading, getLocation, openInMaps } = useGeolocation();
+  const { start: startFocus } = useFocusTimer();
 
   const [search,         setSearch]     = useState("");
   const [filterPriority, setFilter]     = useState<Priority | "all">("all");
@@ -213,6 +215,7 @@ export default function TasksPage() {
                   onAddSubtask={(title) => addSubtask(task.id, title)}
                   onToggleSubtask={(stId) => toggleSubtask(task.id, stId)}
                   onDeleteSubtask={(stId) => deleteSubtask(task.id, stId)}
+                  onStartFocus={() => { startFocus(25, task.title, task.id); toast.success(`Focus session started — 25 min on "${task.title}"`); }}
                 />
               ))}
             </TabsContent>
@@ -355,13 +358,14 @@ export default function TasksPage() {
   );
 }
 
-function TaskRow({ task, onToggle, onEdit, onDelete, onMapOpen, onAddSubtask, onToggleSubtask, onDeleteSubtask }: {
+function TaskRow({ task, onToggle, onEdit, onDelete, onMapOpen, onAddSubtask, onToggleSubtask, onDeleteSubtask, onStartFocus }: {
   task: Task;
   onToggle: () => void; onEdit: () => void; onDelete: () => void;
   onMapOpen: (loc: NonNullable<Task["location"]>) => void;
   onAddSubtask: (title: string) => void;
   onToggleSubtask: (id: string) => void;
   onDeleteSubtask: (id: string) => void;
+  onStartFocus: () => void;
 }) {
   const done  = task.status === "done";
   const style = PRIORITY_STYLES[task.priority];
@@ -429,6 +433,17 @@ function TaskRow({ task, onToggle, onEdit, onDelete, onMapOpen, onAddSubtask, on
           <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={() => setShowSubs((v) => !v)} title="Subtasks">
             <Plus className="w-3.5 h-3.5" />
           </Button>
+          {!done && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 rounded-lg text-primary/80"
+              onClick={onStartFocus}
+              title="25-min focus session"
+            >
+              <Clock className="w-3.5 h-3.5" />
+            </Button>
+          )}
           <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={onEdit}><Edit2 className="w-3.5 h-3.5" /></Button>
           <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-destructive hover:text-destructive" onClick={onDelete}><Trash2 className="w-3.5 h-3.5" /></Button>
         </div>

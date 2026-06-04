@@ -181,9 +181,24 @@ export function useSyncData() {
     const initial = setTimeout(push, 30_000);
     const interval = setInterval(push, 5 * 60 * 1000);
 
+    // Listen for BACKGROUND_SYNC messages from the SW (Background Sync API).
+    // When the network returns after offline, the SW pings us to flush queued data.
+    const swListener = (e: MessageEvent) => {
+      if (e.data?.type === "BACKGROUND_SYNC") {
+        lastPushAt.current = 0; // bypass throttle for one cycle
+        void push();
+      }
+    };
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.addEventListener("message", swListener);
+    }
+
     return () => {
       clearTimeout(initial);
       clearInterval(interval);
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.removeEventListener("message", swListener);
+      }
     };
   }, [session, isOnline, clearPendingDeletes]);
 }
