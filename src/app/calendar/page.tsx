@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import {
   ChevronLeft, ChevronRight, Plus, Calendar as CalIcon,
   Clock, Trash2, Brain, X,
@@ -64,6 +65,16 @@ export default function CalendarPage() {
   const [form, setForm] = useState<EventForm>(DEFAULT_FORM);
   const [view,        setView]        = useState<"month" | "week" | "agenda">("month");
   const [weekStart,   setWeekStart]   = useState(() => startOfWeekFn(new Date(), { weekStartsOn: 1 }));
+
+  // Open create dialog from ?new=1 (keyboard shortcut E)
+  const searchParams = useSearchParams();
+  const router       = useRouter();
+  useEffect(() => {
+    if (searchParams.get("new") === "1") {
+      setForm(DEFAULT_FORM); setDialogOpen(true);
+      router.replace("/calendar");
+    }
+  }, [searchParams, router]);
 
   const calDays = useMemo(() => {
     const start = startOfWeek(startOfMonth(currentMonth));

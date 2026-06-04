@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Menu, Brain, Search } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { usePathname } from "next/navigation";
@@ -22,6 +22,13 @@ export function MobileTopBar({ onMenuClick }: MobileTopBarProps) {
   const { toggleThoughtsPanel } = useAppStore();
   const pathname  = usePathname();
   const [searchOpen, setSearchOpen] = useState(false);
+
+  // Open the search overlay when the Cmd+K shortcut fires
+  useEffect(() => {
+    const handler = () => setSearchOpen(true);
+    document.addEventListener("ts:open-search", handler);
+    return () => document.removeEventListener("ts:open-search", handler);
+  }, []);
 
   if (pathname === "/auth") return null;
 

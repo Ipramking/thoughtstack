@@ -14,6 +14,8 @@ import { useAppStore }                     from "@/store/useAppStore";
 import { useOnlineStatus }                 from "@/hooks/useOnlineStatus";
 import { useSyncData }                     from "@/hooks/useSyncData";
 import { useReminderScheduler }            from "@/hooks/useReminderScheduler";
+import { useKeyboardShortcuts }            from "@/hooks/useKeyboardShortcuts";
+import { ShortcutsHelp }                   from "@/components/ui/shortcuts-help";
 
 // Routes that completely bypass the app shell (no sidebar, no sync hooks, no anything).
 // /reset must work even when the rest of the app is frozen — it's the rescue route.
@@ -28,6 +30,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const totalItems    = useAppStore((s) => s.tasks.length + s.journals.length + s.events.length);
   useSyncData();             // periodic background sync (now throttled to 5 min)
   useReminderScheduler();    // re-arm task reminders (every 15 min)
+  useKeyboardShortcuts();    // / for AI, Cmd+K for search, T/J/E for new items
 
   // Emergency safety: if dataset is huge (from the legacy duplication bug),
   // auto-dedupe on first mount so the app doesn't choke loading 10,000+ items.
@@ -106,6 +109,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* Onboarding — show even offline if session is present */}
       {(session || !isOnline) && <Onboarding />}
+
+      <ShortcutsHelp />
     </div>
   );
 }

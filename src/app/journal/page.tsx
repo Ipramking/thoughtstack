@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useRef, useCallback, useEffect } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import {
   Plus, Search, BookOpen, Edit2, Trash2, Tag, Brain,
   Camera, Sparkles, Loader2, Mic, MicOff, Square,
@@ -13,6 +14,7 @@ import { Input }           from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { PageHeader }      from "@/components/ui/page-header";
 import { EmptyState }      from "@/components/ui/empty-state";
+import { MarkdownView }    from "@/components/ui/markdown-view";
 import { cn, formatDate }  from "@/lib/utils";
 import { toast }           from "@/hooks/useToast";
 import { callThoughts }    from "@/lib/thoughts-ai";
@@ -59,20 +61,6 @@ const MOOD_BG: Record<Mood, string> = {
 
 interface FormData { title: string; content: string; mood: Mood; tags: string; folder: string; photos: string[] }
 const DEFAULT_FORM: FormData = { title: "", content: "", mood: "neutral", tags: "", folder: "", photos: [] };
-
-// ── Markdown renderer (simple subset) ─────────────────────────────────────────
-function renderMarkdown(text: string) {
-  return text
-    .replace(/^### (.+)$/gm, '<h3 class="text-base font-bold mt-2 mb-1">$1</h3>')
-    .replace(/^## (.+)$/gm,  '<h2 class="text-lg font-bold mt-2 mb-1">$1</h2>')
-    .replace(/^# (.+)$/gm,   '<h1 class="text-xl font-bold mt-2 mb-1">$1</h1>')
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.+?)\*/g,    '<em>$1</em>')
-    .replace(/^- (.+)$/gm,   '<li class="ml-4 list-disc">$1</li>')
-    .replace(/^\d+\. (.+)$/gm,'<li class="ml-4 list-decimal">$1</li>')
-    .replace(/^---$/gm,       '<hr class="my-2 border-border" />')
-    .replace(/\n/g,           '<br />');
-}
 
 // ── Speech recognition types (not in all TS lib builds) ──────────────────────
 interface SR extends EventTarget {
@@ -183,6 +171,16 @@ export default function JournalPage() {
   const [analyzing,  setAnalyzing]  = useState(false);
   const [preview,    setPreview]    = useState(false);
   const [showTpls,   setShowTpls]   = useState(false);
+
+  // Auto-open create dialog from ?new=1 (keyboard shortcut J)
+  const searchParams = useSearchParams();
+  const router       = useRouter();
+  useEffect(() => {
+    if (searchParams.get("new") === "1") {
+      setEditId(null); setForm(DEFAULT_FORM); setPreview(false); setDialogOpen(true);
+      router.replace("/journal");
+    }
+  }, [searchParams, router]);
 
   const textareaRef  = useRef<HTMLTextAreaElement>(null);
   const cameraRef    = useRef<HTMLInputElement>(null);
@@ -490,10 +488,11 @@ export default function JournalPage() {
 
                 {/* Textarea / Preview */}
                 {preview ? (
-                  <div
-                    className="min-h-[140px] max-h-[300px] overflow-y-auto rounded-xl border border-border bg-muted/20 px-3.5 py-3 text-sm leading-relaxed prose-sm prose dark:prose-invert"
-                    dangerouslySetInnerHTML={{ __html: renderMarkdown(form.content) || '<p class="text-muted-foreground">Nothing to preview yet…</p>' }}
-                  />
+                  <div className="min-h-[140px] max-h-[300px] overflow-y-auto rounded-xl border border-border bg-muted/20 px-3.5 py-3 text-sm">
+                    {form.content.trim()
+                      ? <MarkdownView content={form.content} />
+                      : <p className="text-muted-foreground">Nothing to preview yet…</p>}
+                  </div>
                 ) : (
                   <textarea
                     ref={textareaRef}

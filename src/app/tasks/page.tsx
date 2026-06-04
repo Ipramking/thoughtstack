@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import {
   Plus, Search, CheckCircle2, Circle, Clock,
   Trash2, Edit2, Flame, Calendar, Brain, Filter,
@@ -22,6 +23,8 @@ import { useNotifications } from "@/hooks/useNotifications";
 import { useGeolocation }   from "@/hooks/useGeolocation";
 import { useSwipe }         from "@/hooks/useSwipe";
 import { toast }            from "@/hooks/useToast";
+import { parseTaskInput }   from "@/lib/parse-task-input";
+import { Sparkles }         from "lucide-react";
 
 const PRIORITY_OPTIONS: Priority[]       = ["low", "medium", "high", "critical"];
 const RECURRENCE_OPTIONS: Recurrence[]   = ["none", "daily", "weekdays", "weekly", "monthly"];
@@ -53,6 +56,18 @@ export default function TasksPage() {
   const [dialogOpen,     setDialogOpen] = useState(false);
   const [editId,         setEditId]     = useState<string | null>(null);
   const [form,           setForm]       = useState<TaskFormData>(DEFAULT_FORM);
+
+  // Open create-dialog from keyboard shortcut (T → /tasks?new=1)
+  const searchParams = useSearchParams();
+  const router       = useRouter();
+  useEffect(() => {
+    if (searchParams.get("new") === "1") {
+      setEditId(null);
+      setForm(DEFAULT_FORM);
+      setDialogOpen(true);
+      router.replace("/tasks");
+    }
+  }, [searchParams, router]);
 
   const filtered = useMemo(() =>
     tasks.filter((t) =>
@@ -206,9 +221,37 @@ export default function TasksPage() {
             </DialogHeader>
             <div className="space-y-4">
               <div>
-                <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Title *</label>
-                <Input placeholder="What needs to be done?" value={form.title}
-                  onChange={(e) => setForm({ ...form, title: e.target.value })} className="rounded-xl" autoFocus />
+                <label className="text-xs font-medium text-muted-foreground mb-1.5 block flex items-center justify-between">
+                  <span>Title *</span>
+                  <span className="text-[10px] text-muted-foreground/70 font-normal flex items-center gap-1">
+                    <Sparkles className="w-3 h-3" /> Try &ldquo;Pay rent on the 5th at 9am !urgent&rdquo;
+                  </span>
+                </label>
+                <Input
+                  placeholder="What needs to be done?"
+                  value={form.title}
+                  onChange={(e) => setForm({ ...form, title: e.target.value })}
+                  onBlur={(e) => {
+                    // Auto-extract date/time/priority/recurrence from the title.
+                    // Only fires when the user moves focus away — doesn't fight typing.
+                    const text = e.target.value.trim();
+                    if (!text || text.length < 4) return;
+                    const parsed = parseTaskInput(text);
+                    const next: Partial<TaskFormData> = {};
+                    if (parsed.title && parsed.title !== text) next.title = parsed.title;
+                    if (parsed.dueDate    && !form.dueDate)              next.dueDate    = parsed.dueDate;
+                    if (parsed.dueTime    && !form.dueTime)              next.dueTime    = parsed.dueTime;
+                    if (parsed.priority   && form.priority === "medium") next.priority   = parsed.priority;
+                    if (parsed.recurrence && form.recurrence === "none") next.recurrence = parsed.recurrence;
+                    if (parsed.dueDate || parsed.dueTime) next.reminder = true;
+                    if (Object.keys(next).length > 0) {
+                      setForm({ ...form, ...next });
+                      toast.success("Auto-filled from title");
+                    }
+                  }}
+                  className="rounded-xl"
+                  autoFocus
+                />
               </div>
               <div>
                 <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Description</label>
