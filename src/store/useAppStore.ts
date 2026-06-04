@@ -1,61 +1,16 @@
 "use client";
 
 import { create } from "zustand";
-import { persist, createJSONStorage, StateStorage } from "zustand/middleware";
+import { persist, createJSONStorage } from "zustand/middleware";
 import {
   Task, JournalEntry, CalendarEvent,
-  ThoughtsMessage, UserProfile, DailyStats, Recurrence, Subtask,
+  ThoughtsMessage, UserProfile, Recurrence,
 } from "@/types";
 import { generateId } from "@/lib/utils";
 import { format, addDays, addWeeks, addMonths, subDays } from "date-fns";
+import { idbStorage } from "@/lib/idb-storage";
 
-// ── Throttled localStorage ────────────────────────────────────────────────────
-// Default zustand persist writes to localStorage synchronously on EVERY state
-// change. With thousands of tasks (legacy duplication bug), JSON.stringify
-// alone took 200–500 ms per call, blocking the main thread on every click.
-// This wrapper batches writes — at most one localStorage.setItem call per
-// 800 ms, with a flush on page unload to avoid losing the latest state.
-const pendingWrites = new Map<string, string>();
-let writeTimer: ReturnType<typeof setTimeout> | null = null;
-
-function flushPendingWrites() {
-  if (typeof window === "undefined") return;
-  for (const [key, value] of pendingWrites) {
-    try { window.localStorage.setItem(key, value); } catch {/* quota / disabled */}
-  }
-  pendingWrites.clear();
-  writeTimer = null;
-}
-
-if (typeof window !== "undefined") {
-  // Flush whatever's pending when the tab is hidden or closed
-  window.addEventListener("pagehide",         flushPendingWrites);
-  window.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "hidden") flushPendingWrites();
-  });
-}
-
-const throttledLocalStorage: StateStorage = {
-  getItem: (name) => {
-    if (typeof window === "undefined") return null;
-    // If we have a pending write, return that (more up-to-date than localStorage)
-    return pendingWrites.get(name) ?? window.localStorage.getItem(name);
-  },
-  setItem: (name, value) => {
-    pendingWrites.set(name, value);
-    if (writeTimer) return;
-    writeTimer = setTimeout(flushPendingWrites, 800);
-  },
-  removeItem: (name) => {
-    pendingWrites.delete(name);
-    if (typeof window !== "undefined") {
-      try { window.localStorage.removeItem(name); } catch {/* ignore */}
-    }
-  },
-};
-
-const now   = () => new Date().toISOString();
-const today = () => format(new Date(), "yyyy-MM-dd");
+const now = () => new Date().toISOString();
 
 function nextDueDate(task: Task): string | undefined {
   if (!task.dueDate || !task.recurrence || task.recurrence === "none") return undefined;
@@ -124,9 +79,6 @@ interface AppState {
   messages: ThoughtsMessage[];
   addMessage:    (m: Omit<ThoughtsMessage, "id" | "timestamp">) => void;
   clearMessages: () => void;
-
-  dailyStats: DailyStats[];
-  recordDailyStat: (s: Partial<DailyStats> & { date: string }) => void;
 
   getStreak: () => number;
 
@@ -364,16 +316,6 @@ export const useAppStore = create<AppState>()(
         set((s) => ({ messages: [...s.messages, { ...m, id: generateId(), timestamp: now() }] })),
       clearMessages: () => set({ messages: [] }),
 
-      // ── Analytics ────────────────────────────────────────────────────────
-      dailyStats: [],
-      recordDailyStat: (stat) =>
-        set((s) => {
-          const exists = s.dailyStats.find((d) => d.date === stat.date);
-          return exists
-            ? { dailyStats: s.dailyStats.map((d) => d.date === stat.date ? { ...d, ...stat } : d) }
-            : { dailyStats: [...s.dailyStats, { tasksCompleted: 0, tasksCreated: 0, journalEntries: 0, ...stat }] };
-        }),
-
       getStreak: () => calcStreak(get().tasks, get().journals),
 
       // ── Push ─────────────────────────────────────────────────────────────
@@ -392,13 +334,19 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name:    "thoughtstack-storage",
-      storage: createJSONStorage(() => throttledLocalStorage),
+      storage: createJSONStorage(() => idbStorage),
+      // Cleaned up: dailyStats (unused) and messages (chat history regenerates)
+      // are no longer persisted. Cuts payload size and JSON.stringify time.
       partialize: (s) => ({
-        profile: s.profile, tasks: s.tasks, journals: s.journals,
-        events: s.events, messages: s.messages.slice(-50), dailyStats: s.dailyStats,
-        pushSubscription: s.pushSubscription, sidebarCollapsed: s.sidebarCollapsed,
-        onboarded: s.onboarded, notificationsEnabled: s.notificationsEnabled,
-        pendingDeletes: s.pendingDeletes,
+        profile:              s.profile,
+        tasks:                s.tasks,
+        journals:             s.journals,
+        events:               s.events,
+        pushSubscription:     s.pushSubscription,
+        sidebarCollapsed:     s.sidebarCollapsed,
+        onboarded:            s.onboarded,
+        notificationsEnabled: s.notificationsEnabled,
+        pendingDeletes:       s.pendingDeletes,
       }),
     }
   )
