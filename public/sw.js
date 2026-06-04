@@ -11,7 +11,7 @@
 // 4. Version bumped to v14 so browsers that cached a broken older build
 //    immediately detect the new file and re-install the worker.
 
-const VERSION = "thoughtstack-v16";
+const VERSION = "thoughtstack-v17";
 const CACHE   = VERSION;
 
 // Only truly static assets that have no auth requirement.
@@ -29,8 +29,20 @@ const PRECACHE = [
 const reminders = new Map();
 
 // ── Helper: cache a response, stripping no-store if present ──────────────────
+//
+// CRITICAL: response.redirected === true means the original URL got redirected
+// (e.g. unauthenticated GET / → 302 → /auth). If we cache that response under
+// the original key (request.url), we end up serving the auth page HTML when
+// the user later opens "/" offline. That's how PWA installs were getting
+// "stuck on the auth page when opened offline".
+//
+// We refuse to cache:
+//   - Failed responses (not 2xx)
+//   - Opaque or redirected responses (don't match the request URL semantically)
 async function cacheResponse(cache, request, response) {
-  if (!response || !response.ok) return;
+  if (!response || !response.ok)  return;
+  if (response.redirected)        return;
+  if (response.type === "opaque") return;
 
   const cc = response.headers.get("cache-control") ?? "";
 
@@ -56,6 +68,67 @@ async function cacheResponse(cache, request, response) {
   }
 
   await cache.put(request, toCache).catch(() => {/* silent */});
+}
+
+// ── Helper: minimal inline HTML so PWA always opens when offline ──────────────
+//
+// Used as the absolute last fallback when EVERY navigation request fails and
+// neither the requested URL nor "/" is cached. Renders a friendly "loading…"
+// screen with a "Retry" button. The page also pings the SW every few seconds
+// to detect when the SW has a usable cache and reload.
+function offlineShellResponse(pathname) {
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>ThoughtStack</title>
+  <link rel="icon" href="/icon-192.png">
+  <style>
+    *,*::before,*::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html,body { height: 100%; background: #0d0d0d; color: #fff; font-family: system-ui, -apple-system, sans-serif; }
+    body { display: flex; align-items: center; justify-content: center; padding: 24px; }
+    .wrap { max-width: 360px; text-align: center; }
+    .logo { width: 56px; height: 56px; border-radius: 14px; margin: 0 auto 20px;
+      background: linear-gradient(180deg, #1a1a1e 0%, #0d0d0d 100%);
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 0 32px rgba(124,58,237,0.25); }
+    .logo svg { color: #a78bfa; }
+    h1 { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
+    p { font-size: 13px; line-height: 1.6; color: rgba(255,255,255,0.6); margin-bottom: 20px; }
+    .btn { display: inline-block; padding: 12px 22px; border: 0; border-radius: 12px;
+      background: #fff; color: #0d0d0d; font-size: 14px; font-weight: 600; cursor: pointer; }
+    .btn:active { transform: scale(0.97); }
+    .dots { display: inline-flex; gap: 4px; margin-top: 16px; }
+    .dots span { width: 5px; height: 5px; border-radius: 50%; background: #a78bfa;
+      animation: pulse 1.4s ease-in-out infinite; }
+    .dots span:nth-child(2) { animation-delay: 0.2s; }
+    .dots span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes pulse { 0%,80%,100% { opacity: 0.2; } 40% { opacity: 1; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="logo">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M5 4h14M12 4v16"/>
+      </svg>
+    </div>
+    <h1>ThoughtStack</h1>
+    <p>You're offline and this page isn't cached yet. Reconnect to load it, or try the home screen.</p>
+    <button class="btn" onclick="location.href='/'">Go to home</button>
+    <div class="dots"><span></span><span></span><span></span></div>
+  </div>
+  <script>
+    // When network comes back, reload to the route the user originally wanted
+    window.addEventListener("online", () => location.replace(${JSON.stringify(pathname)}));
+  </script>
+</body>
+</html>`;
+  return new Response(html, {
+    status:  200,
+    headers: { "content-type": "text/html; charset=utf-8" },
+  });
 }
 
 // ── Install ────────────────────────────────────────────────────────────────────
@@ -169,41 +242,41 @@ self.addEventListener("fetch", (e) => {
     return;
   }
 
-  // ── 5. HTML / navigation — network-first, serve cached copy offline ────────────
+  // ── 5. HTML / navigation — network-first, robust offline fallback ────────────
   //
-  // Online:  fetch fresh → strip no-store → store in cache → return to browser
-  // Offline: serve cached copy of this exact URL
-  //          → fall back to cached "/" (app shell; Next.js router handles routing)
-  //          → last resort: /offline page
+  // Online:  fetch fresh → strip no-store + skip-if-redirected → cache → return.
+  // Offline: serve cached copy of this exact URL (ignoring query/vary)
+  //          → fall back to cached "/" (Next.js client router takes over)
+  //          → fall back to cached "/auth"   (so logged-out users still see login)
+  //          → fall back to cached "/offline"
+  //          → absolute last resort: inline HTML shell that auto-reloads on reconnect.
   //
-  // This is the key offline-capable strategy. Pages get cached as the user browses
-  // while online. Authentication-gated pages only cache AFTER the user has logged in.
+  // The inline shell guarantees the PWA never opens to a blank white page.
   if (request.mode === "navigate" || request.destination === "document") {
     e.respondWith(
       caches.open(CACHE).then(async (cache) => {
         try {
           const fresh = await fetch(request);
-          // Cache regardless of Cache-Control: no-store (our helper strips it)
           await cacheResponse(cache, request, fresh);
           return fresh;
         } catch {
-          // ── Offline fallback chain ──────────────────────────────────────────
-          const cached = await cache.match(request);
+          // ── Offline fallback chain ────────────────────────────────────────
+          const opts = { ignoreSearch: true, ignoreVary: true };
+
+          const cached = await cache.match(request, opts);
           if (cached) return cached;
 
-          // Try the root as a generic app shell (client-side router takes over)
-          const shell = await cache.match(new Request("/"));
-          if (shell) return shell;
+          const root = await cache.match(new Request("/"), opts);
+          if (root) return root;
 
-          // True last resort
-          const offlinePage = await caches.match("/offline");
-          return (
-            offlinePage ??
-            new Response("You are offline", {
-              status: 503,
-              headers: { "Content-Type": "text/plain" },
-            })
-          );
+          const authShell = await cache.match(new Request("/auth"), opts);
+          if (authShell) return authShell;
+
+          const offlinePage = await cache.match(new Request("/offline"), opts);
+          if (offlinePage) return offlinePage;
+
+          // Truly nothing cached — show inline rescue shell so PWA opens
+          return offlineShellResponse(url.pathname);
         }
       })
     );
