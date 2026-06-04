@@ -72,6 +72,20 @@ export interface CalendarEvent {
   createdAt: string;
 }
 
+// ─── Habits ───────────────────────────────────────────────────────────────────
+
+export interface Habit {
+  id:        string;
+  name:      string;        // "Drink water", "Read 20 min"
+  icon?:     string;        // emoji
+  color?:    string;        // tailwind text-* class
+  createdAt: string;
+  updatedAt: string;
+  // completedDates is a sparse map of "YYYY-MM-DD" -> true.
+  // We use a map (not array) so toggle is O(1) and JSON storage is compact.
+  completedDates: Record<string, true>;
+}
+
 // ─── Thoughts AI ──────────────────────────────────────────────────────────────
 
 export type MessageRole = "user" | "assistant";

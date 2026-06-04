@@ -3,7 +3,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import {
-  Task, JournalEntry, CalendarEvent,
+  Task, JournalEntry, CalendarEvent, Habit,
   ThoughtsMessage, UserProfile, Recurrence,
 } from "@/types";
 import { generateId } from "@/lib/utils";
@@ -79,6 +79,13 @@ interface AppState {
   messages: ThoughtsMessage[];
   addMessage:    (m: Omit<ThoughtsMessage, "id" | "timestamp">) => void;
   clearMessages: () => void;
+
+  // ── Habits ─────────────────────────────────────────────────────────────────
+  habits: Habit[];
+  addHabit:        (h: { name: string; icon?: string; color?: string }) => Habit;
+  updateHabit:     (id: string, u: Partial<Habit>) => void;
+  deleteHabit:     (id: string) => void;
+  toggleHabitDate: (id: string, date: string) => void;   // YYYY-MM-DD
 
   getStreak: () => number;
 
@@ -316,6 +323,38 @@ export const useAppStore = create<AppState>()(
         set((s) => ({ messages: [...s.messages, { ...m, id: generateId(), timestamp: now() }] })),
       clearMessages: () => set({ messages: [] }),
 
+      // ── Habits ──────────────────────────────────────────────────────────
+      habits: [],
+      addHabit: ({ name, icon, color }) => {
+        const h: Habit = {
+          id: generateId(),
+          name,
+          icon,
+          color,
+          createdAt: now(),
+          updatedAt: now(),
+          completedDates: {},
+        };
+        set((s) => ({ habits: [...s.habits, h] }));
+        return h;
+      },
+      updateHabit: (id, u) =>
+        set((s) => ({
+          habits: s.habits.map((h) => h.id === id ? { ...h, ...u, updatedAt: now() } : h),
+        })),
+      deleteHabit: (id) =>
+        set((s) => ({ habits: s.habits.filter((h) => h.id !== id) })),
+      toggleHabitDate: (id, date) =>
+        set((s) => ({
+          habits: s.habits.map((h) => {
+            if (h.id !== id) return h;
+            const next = { ...h.completedDates };
+            if (next[date]) delete next[date];
+            else            next[date] = true;
+            return { ...h, completedDates: next, updatedAt: now() };
+          }),
+        })),
+
       getStreak: () => calcStreak(get().tasks, get().journals),
 
       // ── Push ─────────────────────────────────────────────────────────────
@@ -342,6 +381,7 @@ export const useAppStore = create<AppState>()(
         tasks:                s.tasks,
         journals:             s.journals,
         events:               s.events,
+        habits:               s.habits,
         pushSubscription:     s.pushSubscription,
         sidebarCollapsed:     s.sidebarCollapsed,
         onboarded:            s.onboarded,

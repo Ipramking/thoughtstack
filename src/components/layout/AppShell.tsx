@@ -16,6 +16,7 @@ import { useSyncData }                     from "@/hooks/useSyncData";
 import { useReminderScheduler }            from "@/hooks/useReminderScheduler";
 import { useKeyboardShortcuts }            from "@/hooks/useKeyboardShortcuts";
 import { ShortcutsHelp }                   from "@/components/ui/shortcuts-help";
+import { FocusTimerBadge }                 from "@/components/ui/focus-timer";
 
 // Routes that completely bypass the app shell (no sidebar, no sync hooks, no anything).
 // /reset must work even when the rest of the app is frozen — it's the rescue route.
@@ -111,6 +112,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {(session || !isOnline) && <Onboarding />}
 
       <ShortcutsHelp />
+      <FocusTimerBadge />
     </div>
   );
 }

@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
 import { signOut, useSession } from "next-auth/react";
 import {
-  Home, CheckSquare, BookOpen, Calendar,
+  Home, CheckSquare, BookOpen, Calendar, Target,
   User, Settings, Brain, ChevronLeft, ChevronRight,
   Sun, Moon, LogOut, Shield, X,
 } from "lucide-react";
@@ -18,6 +18,7 @@ const NAV_CORE = [
   { href: "/tasks",    icon: CheckSquare, label: "Tasks"    },
   { href: "/journal",  icon: BookOpen,    label: "Journal"  },
   { href: "/calendar", icon: Calendar,    label: "Calendar" },
+  { href: "/habits",   icon: Target,      label: "Habits"   },
 ];
 const NAV_ACCOUNT = [
   { href: "/profile",  icon: User,     label: "Profile"  },
