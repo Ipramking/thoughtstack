@@ -175,23 +175,33 @@ export const useAppStore = create<AppState>()(
         return s;
       }),
       // Remove duplicate tasks: same title + dueDate + status. Keeps the newest.
+      // CRITICAL: removed ids go into pendingDeletes so the server also drops
+      // them on next sync — otherwise the next pull resurrects the duplicates.
       dedupTasks: () => {
-        const before = get().tasks.length;
+        const before = get().tasks;
         const keyOf = (t: Task) => `${t.title.trim().toLowerCase()}|${t.dueDate ?? ""}|${t.status}`;
         const groups = new Map<string, Task[]>();
-        for (const t of get().tasks) {
+        for (const t of before) {
           const k = keyOf(t);
           const arr = groups.get(k) ?? [];
           arr.push(t);
           groups.set(k, arr);
         }
         const kept: Task[] = [];
+        const removedIds: string[] = [];
         for (const arr of groups.values()) {
           arr.sort((a, b) => (b.updatedAt ?? b.createdAt ?? "").localeCompare(a.updatedAt ?? a.createdAt ?? ""));
           kept.push(arr[0]);
+          for (let i = 1; i < arr.length; i++) removedIds.push(arr[i].id);
         }
-        set({ tasks: kept });
-        return before - kept.length;
+        set((s) => ({
+          tasks: kept,
+          pendingDeletes: {
+            ...s.pendingDeletes,
+            tasks: [...s.pendingDeletes.tasks, ...removedIds],
+          },
+        }));
+        return removedIds.length;
       },
       completeTask: (id) => {
         const { tasks, addTask } = get();
@@ -260,23 +270,31 @@ export const useAppStore = create<AppState>()(
       }),
       // Dedup journals by title + createdAt date (same minute = same entry)
       dedupJournals: () => {
-        const before = get().journals.length;
+        const before = get().journals;
         const keyOf = (j: JournalEntry) =>
           `${j.title.trim().toLowerCase()}|${(j.createdAt ?? "").slice(0, 16)}`;
         const groups = new Map<string, JournalEntry[]>();
-        for (const j of get().journals) {
+        for (const j of before) {
           const k = keyOf(j);
           const arr = groups.get(k) ?? [];
           arr.push(j);
           groups.set(k, arr);
         }
         const kept: JournalEntry[] = [];
+        const removedIds: string[] = [];
         for (const arr of groups.values()) {
           arr.sort((a, b) => (b.updatedAt ?? b.createdAt ?? "").localeCompare(a.updatedAt ?? a.createdAt ?? ""));
           kept.push(arr[0]);
+          for (let i = 1; i < arr.length; i++) removedIds.push(arr[i].id);
         }
-        set({ journals: kept });
-        return before - kept.length;
+        set((s) => ({
+          journals: kept,
+          pendingDeletes: {
+            ...s.pendingDeletes,
+            journals: [...s.pendingDeletes.journals, ...removedIds],
+          },
+        }));
+        return removedIds.length;
       },
 
       // ── Calendar ─────────────────────────────────────────────────────────
@@ -304,23 +322,31 @@ export const useAppStore = create<AppState>()(
       }),
       // Dedup events by title + date + startTime
       dedupEvents: () => {
-        const before = get().events.length;
+        const before = get().events;
         const keyOf = (e: CalendarEvent) =>
           `${e.title.trim().toLowerCase()}|${e.date}|${e.startTime ?? ""}`;
         const groups = new Map<string, CalendarEvent[]>();
-        for (const e of get().events) {
+        for (const e of before) {
           const k = keyOf(e);
           const arr = groups.get(k) ?? [];
           arr.push(e);
           groups.set(k, arr);
         }
         const kept: CalendarEvent[] = [];
+        const removedIds: string[] = [];
         for (const arr of groups.values()) {
           arr.sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
           kept.push(arr[0]);
+          for (let i = 1; i < arr.length; i++) removedIds.push(arr[i].id);
         }
-        set({ events: kept });
-        return before - kept.length;
+        set((s) => ({
+          events: kept,
+          pendingDeletes: {
+            ...s.pendingDeletes,
+            events: [...s.pendingDeletes.events, ...removedIds],
+          },
+        }));
+        return removedIds.length;
       },
 
       // ── Pending deletes — synced to server on next push ─────────────────────

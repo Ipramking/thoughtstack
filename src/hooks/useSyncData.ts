@@ -64,18 +64,19 @@ async function pushDeletes(
   for (const type of ["tasks", "journals", "events"] as const) {
     const ids = pending[type];
     if (!ids.length) continue;
-    const successful: string[] = [];
-    for (const id of ids) {
+
+    // Chunk the batch so a 5000-id pendingDeletes queue doesn't blow request limits
+    for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
+      const chunk = ids.slice(i, i + CHUNK_SIZE);
       try {
         const res = await fetch("/api/sync", {
           method:  "DELETE",
           headers: { "Content-Type": "application/json" },
-          body:    JSON.stringify({ type, id }),
+          body:    JSON.stringify({ type, ids: chunk }),
         });
-        if (res.ok) successful.push(id);
+        if (res.ok) clearPendingDeletes(type, chunk);
       } catch {/* offline — keep in queue */}
     }
-    if (successful.length) clearPendingDeletes(type, successful);
   }
 }
 
@@ -94,6 +95,10 @@ export function useSyncData() {
   const isPushing  = useRef(false);
   const lastPushAt = useRef(0);
 
+  const deleteTask    = useAppStore((s) => s.deleteTask);
+  const deleteJournal = useAppStore((s) => s.deleteJournal);
+  const deleteEvent   = useAppStore((s) => s.deleteEvent);
+
   // ── Pull once per session ────────────────────────────────────────────────────
   useEffect(() => {
     if (!session?.user || !isOnline || hasPulled.current) return;
@@ -101,34 +106,54 @@ export function useSyncData() {
 
     (async () => {
       try {
-        // Push pending deletes first so we don't pull back items we just deleted
+        // Push pending deletes first so the server has them before we pull
         await pushDeletes(useAppStore.getState().pendingDeletes, clearPendingDeletes);
 
         const res = await fetch("/api/sync");
         if (!res.ok) return;
         const remote = await res.json() as {
-          tasks:    SyncRow<Task>[];
-          journals: SyncRow<JournalEntry>[];
-          events:   SyncRow<CalendarEvent>[];
+          tasks:      SyncRow<Task>[];
+          journals:   SyncRow<JournalEntry>[];
+          events:     SyncRow<CalendarEvent>[];
+          tombstones?: { tasks: string[]; journals: string[]; events: string[] };
         };
 
+        // 1. Apply tombstones — items deleted on other devices must be removed
+        //    here too. Each delete also adds the id to local pendingDeletes,
+        //    which is fine since the server already knows about it.
+        const tombstones = remote.tombstones ?? { tasks: [], journals: [], events: [] };
+        const localTasks    = useAppStore.getState().tasks;
+        const localJournals = useAppStore.getState().journals;
+        const localEvents   = useAppStore.getState().events;
+        const tombTaskSet   = new Set(tombstones.tasks);
+        const tombJournalSet = new Set(tombstones.journals);
+        const tombEventSet  = new Set(tombstones.events);
+
+        for (const t of localTasks)    if (tombTaskSet.has(t.id))    deleteTask(t.id);
+        for (const j of localJournals) if (tombJournalSet.has(j.id)) deleteJournal(j.id);
+        for (const e of localEvents)   if (tombEventSet.has(e.id))   deleteEvent(e.id);
+
+        // 2. Upsert remote rows that are NOT tombstoned AND NOT in our pending-delete queue
         const recentlyDeleted = useAppStore.getState().pendingDeletes;
 
         for (const row of remote.tasks) {
-          if (recentlyDeleted.tasks.includes(row.id)) continue;
+          if (tombTaskSet.has(row.id))                    continue;
+          if (recentlyDeleted.tasks.includes(row.id))     continue;
           upsertTask({ ...row.data, id: row.id });
         }
         for (const row of remote.journals) {
-          if (recentlyDeleted.journals.includes(row.id)) continue;
+          if (tombJournalSet.has(row.id))                 continue;
+          if (recentlyDeleted.journals.includes(row.id))  continue;
           upsertJournal({ ...row.data, id: row.id });
         }
         for (const row of remote.events) {
-          if (recentlyDeleted.events.includes(row.id)) continue;
+          if (tombEventSet.has(row.id))                   continue;
+          if (recentlyDeleted.events.includes(row.id))    continue;
           upsertEvent({ ...row.data, id: row.id });
         }
       } catch {/* silent */}
     })();
-  }, [session, isOnline, upsertTask, upsertJournal, upsertEvent, clearPendingDeletes]);
+  }, [session, isOnline, upsertTask, upsertJournal, upsertEvent, deleteTask, deleteJournal, deleteEvent, clearPendingDeletes]);
 
   // ── Periodic push (every 5 min) — NOT on every state change or focus ─────────
   useEffect(() => {
