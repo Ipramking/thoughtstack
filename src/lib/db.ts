@@ -104,3 +104,87 @@ export async function deleteUser(id: string): Promise<void> {
     .eq("id", id)
     .neq("role", "admin"); // never delete admin
 }
+
+// ─── Self-service helpers (used by the account-management page) ──────────────
+
+/**
+ * Verify a user's current password and replace it with a new one.
+ * Returns true if the password was updated, false if the current password
+ * didn't match. Throws on database error.
+ */
+export async function changeUserPassword(
+  email: string,
+  currentPassword: string,
+  newPassword: string,
+): Promise<boolean> {
+  const sb = getSupabase();
+  const { data: user } = await sb
+    .from("ts_users")
+    .select("id, password_hash")
+    .eq("email", email.toLowerCase().trim())
+    .maybeSingle();
+
+  if (!user) return false;
+
+  const ok = await bcrypt.compare(currentPassword, user.password_hash as string);
+  if (!ok) return false;
+
+  const newHash = await bcrypt.hash(newPassword, 12);
+  const { error } = await sb
+    .from("ts_users")
+    .update({ password_hash: newHash })
+    .eq("id", user.id as string)
+    .neq("role", "admin");   // never let admin change here without explicit handling
+
+  if (error) throw error;
+  return true;
+}
+
+/**
+ * Permanently delete a user account and every row that belongs to it.
+ * Verifies the password first to prevent CSRF-style attacks.
+ * Returns true on success, false if password didn't match.
+ *
+ * Wipes from: ts_tasks, ts_journals, ts_events, ts_push_subscriptions,
+ * ts_reminders, ts_tombstones, then finally ts_users.
+ */
+export async function deleteSelfAccount(
+  email: string,
+  password: string,
+): Promise<boolean> {
+  const sb = getSupabase();
+  const emailClean = email.toLowerCase().trim();
+
+  const { data: user } = await sb
+    .from("ts_users")
+    .select("id, password_hash, role")
+    .eq("email", emailClean)
+    .maybeSingle();
+
+  if (!user) return false;
+  // Admins must be deleted by another admin, not self-service
+  if (user.role === "admin") throw new Error("admin_cannot_self_delete");
+
+  const ok = await bcrypt.compare(password, user.password_hash as string);
+  if (!ok) return false;
+
+  // Wipe owned data first. Missing tables (e.g. tombstones not yet migrated)
+  // shouldn't block account deletion — we ignore individual errors.
+  const tables = [
+    "ts_tasks",
+    "ts_journals",
+    "ts_events",
+    "ts_push_subscriptions",
+    "ts_reminders",
+    "ts_tombstones",
+  ] as const;
+
+  for (const table of tables) {
+    await sb.from(table).delete().eq("user_email", emailClean);
+  }
+
+  // Finally remove the user
+  const { error } = await sb.from("ts_users").delete().eq("id", user.id as string);
+  if (error) throw error;
+  return true;
+}

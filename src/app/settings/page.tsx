@@ -1,7 +1,7 @@
 "use client";
 
 import { useTheme }    from "next-themes";
-import { Sun, Moon, Trash2, Bell, CheckCircle2, Check, FlaskConical, Download, Upload, RefreshCw } from "lucide-react";
+import { Sun, Moon, Trash2, Bell, CheckCircle2, Check, FlaskConical, Download, Upload, RefreshCw, KeyRound } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { Card, CardContent, CardHeader, CardDescription } from "@/components/ui/card";
 import { Button }      from "@/components/ui/button";
@@ -283,6 +283,27 @@ export default function SettingsPage() {
                     <Upload className="w-3.5 h-3.5" /> Restore
                   </Button>
                 </>
+              }
+            />
+          </CardContent></Card>
+        </div>
+
+        {/* Account */}
+        <div className="space-y-2">
+          <Section>Account</Section>
+          <Card><CardContent className="p-5">
+            <Row
+              label="Manage account"
+              description="Change your password or permanently delete your account."
+              action={
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-xl gap-1.5"
+                  onClick={() => window.location.assign("/account")}
+                >
+                  <KeyRound className="w-3.5 h-3.5" /> Open
+                </Button>
               }
             />
           </CardContent></Card>
