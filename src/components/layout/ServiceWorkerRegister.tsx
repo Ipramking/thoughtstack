@@ -14,7 +14,9 @@ async function isCached(path: string): Promise<boolean> {
   const keys = await caches.keys();
   for (const k of keys) {
     const cache = await caches.open(k);
-    const match = await cache.match(new Request(path, { credentials: "include" }));
+    // ignoreVary + ignoreSearch so cookie/query variance doesn't trick us
+    // into re-fetching pages that are already cached.
+    const match = await cache.match(new Request(path), { ignoreVary: true, ignoreSearch: true });
     if (match) return true;
   }
   return false;
@@ -103,6 +105,13 @@ export function ServiceWorkerRegister() {
         // Update-check on tab focus only (no background polling loop)
         const onFocus = () => reg.update().catch(() => {});
         window.addEventListener("focus", onFocus);
+
+        // Register background sync so queued writes flush when network returns.
+        // SyncManager is only available in Chrome/Edge — feature-detect first.
+        const swReg = reg as ServiceWorkerRegistration & { sync?: { register: (tag: string) => Promise<void> } };
+        if (swReg.sync) {
+          swReg.sync.register("ts-sync-data").catch(() => {/* not supported */});
+        }
 
         reg.addEventListener("updatefound", () => {
           const newWorker = reg.installing;

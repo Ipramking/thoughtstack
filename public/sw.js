@@ -1,17 +1,17 @@
-// ThoughtStack Service Worker — v15
+// ThoughtStack Service Worker — v18
 //
-// KEY FIXES:
-// 1. Vercel/Next.js sends "Cache-Control: no-store" on SSR pages. Chrome's
-//    Cache Storage API refuses to store no-store responses (throws TypeError).
-//    cacheResponse() strips no-store before calling cache.put().
-// 2. chrome-extension:// URLs are bailed out before ANY URL parsing
-//    so they never reach cache.put() at all.
-// 3. PRECACHE_PAGES removed — fetching auth-gated routes at install has no
-//    session cookie, follows redirect to /auth, would cache the wrong page.
-// 4. Version bumped to v14 so browsers that cached a broken older build
-//    immediately detect the new file and re-install the worker.
+// History of fixes (cumulative):
+//   - Vercel/Next.js sends "Cache-Control: no-store" on SSR pages. Chrome's
+//     Cache Storage API refuses to store no-store responses (throws TypeError).
+//     cacheResponse() strips no-store before calling cache.put().
+//   - chrome-extension:// URLs are bailed out before any URL parsing.
+//   - response.redirected check: never cache a response whose body doesn't
+//     match the request URL (prevents the auth-page-cached-as-/ bug).
+//   - v18: install handler no longer uses caches.addAll() — it bypasses
+//     cacheResponse() and so silently fails on no-store pages. We now fetch
+//     each PRECACHE entry through our own helper.
 
-const VERSION = "thoughtstack-v17";
+const VERSION = "thoughtstack-v18";
 const CACHE   = VERSION;
 
 // Only truly static assets that have no auth requirement.
@@ -132,11 +132,22 @@ function offlineShellResponse(pathname) {
 }
 
 // ── Install ────────────────────────────────────────────────────────────────────
+//
+// Replaces caches.addAll() which uses raw cache.put() and silently fails on
+// no-store responses (i.e. every Next.js SSR page). We loop manually and run
+// each response through cacheResponse() which strips no-store before storing.
 self.addEventListener("install", (e) => {
   e.waitUntil(
-    caches.open(CACHE)
-      .then((c) => c.addAll(PRECACHE).catch(() => {}))
-      .then(() => self.skipWaiting())
+    caches.open(CACHE).then(async (cache) => {
+      await Promise.allSettled(
+        PRECACHE.map(async (path) => {
+          try {
+            const res = await fetch(path, { credentials: "same-origin" });
+            await cacheResponse(cache, new Request(path), res);
+          } catch {/* one missing path shouldn't block the rest */}
+        })
+      );
+    }).then(() => self.skipWaiting())
   );
 });
 
@@ -206,7 +217,7 @@ self.addEventListener("fetch", (e) => {
           return res;
         })
         .catch(async () => {
-          const cached = await caches.match(request);
+          const cached = await caches.match(request, { ignoreVary: true });
           return (
             cached ??
             new Response("null", { headers: { "Content-Type": "application/json" } })
@@ -338,7 +349,9 @@ self.addEventListener("notificationclick", (e) => {
     self.clients
       .matchAll({ type: "window", includeUncontrolled: true })
       .then((clients) => {
-        const existing = clients.find((c) => c.url.includes(self.location.origin));
+        // startsWith — not includes — so an unrelated tab whose URL happens
+        // to contain our origin substring doesn't get focused by accident.
+        const existing = clients.find((c) => c.url.startsWith(self.location.origin));
         if (existing) { existing.focus(); existing.navigate(target); }
         else self.clients.openWindow(target);
       })

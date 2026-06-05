@@ -1,14 +1,17 @@
 {
+  "id": "/",
   "name": "ThoughtStack",
   "short_name": "ThoughtStack",
   "description": "Your AI-powered personal operating system",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "background_color": "#0d0d0d",
   "theme_color": "#0d0d0d",
   "orientation": "portrait-primary",
   "categories": ["productivity", "lifestyle"],
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "/icon-192.png",

@@ -16,8 +16,10 @@ export const viewport: Viewport = {
   ],
   width:           "device-width",
   initialScale:    1,
-  maximumScale:    1,
-  userScalable:    false,
+  // Allow zooming — disabling it is a WCAG accessibility violation.
+  // iOS 15+ overrides user-scalable=no anyway; Android respects it and
+  // we don't want to lock out users who need to zoom for low vision.
+  maximumScale:    5,
   viewportFit:     "cover",
   interactiveWidget: "resizes-visual",
 };
