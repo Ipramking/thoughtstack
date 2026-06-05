@@ -26,6 +26,36 @@
       "purpose": "any maskable"
     }
   ],
+  "screenshots": [
+    {
+      "src": "/screenshot-mobile-home.png",
+      "sizes": "540x1170",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Home — daily greeting, streak, today's focus, quick AI capture"
+    },
+    {
+      "src": "/screenshot-mobile-tasks.png",
+      "sizes": "540x1170",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Tasks — priorities, due times, recurring task support"
+    },
+    {
+      "src": "/screenshot-wide-home.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Home dashboard with sidebar navigation"
+    },
+    {
+      "src": "/screenshot-wide-tasks.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Task management with filters and details panel"
+    }
+  ],
   "shortcuts": [
     {
       "name": "Tasks",

@@ -11,7 +11,7 @@
 //     cacheResponse() and so silently fails on no-store pages. We now fetch
 //     each PRECACHE entry through our own helper.
 
-const VERSION = "thoughtstack-v18";
+const VERSION = "thoughtstack-v19";
 const CACHE   = VERSION;
 
 // Only truly static assets that have no auth requirement.
@@ -26,7 +26,103 @@ const PRECACHE = [
   "/manifest.json",
 ];
 
+// In-memory map of active setTimeout handles. Lost on every SW restart —
+// that's fine, because the SOURCE OF TRUTH is the IndexedDB 'reminders' store.
+// On every activate, restoreReminders() reads IDB and re-arms timers from scratch.
 const reminders = new Map();
+
+// ── IndexedDB-backed reminder store ──────────────────────────────────────────
+// Browsers terminate idle Service Workers after ~30 s. setTimeout handles die
+// with them, so a reminder scheduled at 9 a.m. for 5 p.m. is gone by lunchtime.
+// We persist every SCHEDULE_REMINDER to IndexedDB and restore on activate.
+const IDB_NAME    = "ts-sw";
+const IDB_STORE   = "reminders";
+const IDB_VERSION = 1;
+
+function openIdb() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_NAME, IDB_VERSION);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(IDB_STORE)) {
+        db.createObjectStore(IDB_STORE, { keyPath: "id" });
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror   = () => reject(req.error);
+  });
+}
+
+async function idbPutReminder(reminder) {
+  try {
+    const db = await openIdb();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, "readwrite");
+      tx.objectStore(IDB_STORE).put(reminder);
+      tx.oncomplete = () => resolve();
+      tx.onerror    = () => reject(tx.error);
+    });
+  } catch {/* idb unavailable — best-effort */}
+}
+
+async function idbDeleteReminder(id) {
+  try {
+    const db = await openIdb();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, "readwrite");
+      tx.objectStore(IDB_STORE).delete(id);
+      tx.oncomplete = () => resolve();
+      tx.onerror    = () => reject(tx.error);
+    });
+  } catch {/* ignore */}
+}
+
+async function idbGetAllReminders() {
+  try {
+    const db = await openIdb();
+    return await new Promise((resolve, reject) => {
+      const tx  = db.transaction(IDB_STORE, "readonly");
+      const req = tx.objectStore(IDB_STORE).getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror   = () => reject(req.error);
+    });
+  } catch {
+    return [];
+  }
+}
+
+function armReminder(rec) {
+  const delay = rec.dueAt - Date.now();
+  if (delay <= 0) {
+    // Already past due — fire immediately to avoid losing it
+    fireReminder(rec);
+    return;
+  }
+  // Clear any prior timer for this id
+  if (reminders.has(rec.id)) clearTimeout(reminders.get(rec.id).timerId);
+  const timerId = setTimeout(() => fireReminder(rec), delay);
+  reminders.set(rec.id, { timerId });
+}
+
+function fireReminder(rec) {
+  self.registration.showNotification(rec.title || "Reminder", {
+    body:    rec.body || "Your task is due now!",
+    icon:    "/icon-192.png",
+    badge:   "/icon-192.png",
+    vibrate: [200, 100, 200],
+    tag:     rec.id,
+    renotify: true,
+    data:    { url: rec.url || "/tasks" },
+    actions: [{ action: "open", title: "View task" }],
+  });
+  reminders.delete(rec.id);
+  void idbDeleteReminder(rec.id);
+}
+
+async function restoreReminders() {
+  const all = await idbGetAllReminders();
+  for (const rec of all) armReminder(rec);
+}
 
 // ── Helper: cache a response, stripping no-store if present ──────────────────
 //
@@ -151,7 +247,7 @@ self.addEventListener("install", (e) => {
   );
 });
 
-// ── Activate — wipe ALL old caches ─────────────────────────────────────────────
+// ── Activate — wipe old caches + restore persisted reminders ─────────────────
 self.addEventListener("activate", (e) => {
   e.waitUntil(
     caches.keys()
@@ -159,6 +255,10 @@ self.addEventListener("activate", (e) => {
         Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
       )
       .then(() => self.clients.claim())
+      // Restore any reminders that were scheduled in a previous SW lifecycle.
+      // Browsers terminate idle SWs every ~30 s; without this, a reminder set
+      // in the morning silently disappears by the afternoon.
+      .then(() => restoreReminders())
       .then(() =>
         self.clients
           .matchAll({ includeUncontrolled: true, type: "window" })
@@ -366,30 +466,18 @@ self.addEventListener("message", (e) => {
 
   if (type === "SCHEDULE_REMINDER") {
     const { id, title, body, dueAt, url } = payload;
-    const delay = dueAt - Date.now();
-    if (delay <= 0) return;
-    if (reminders.has(id)) clearTimeout(reminders.get(id).timerId);
-
-    const timerId = setTimeout(() => {
-      self.registration.showNotification(title ?? "Reminder", {
-        body:    body ?? "Your task is due now!",
-        icon:    "/icon-192.png",
-        badge:   "/icon-192.png",
-        vibrate: [200, 100, 200],
-        tag:     id,         // shared with server push so only one notification shows
-        renotify: true,
-        data:    { url: url ?? "/tasks" },
-        actions: [{ action: "open", title: "View task" }],
-      });
-      reminders.delete(id);
-    }, delay);
-
-    reminders.set(id, { title, timerId });
+    if (!id || !dueAt) return;
+    const rec = { id, title, body, dueAt, url };
+    armReminder(rec);
+    // Persist so it survives SW termination (the source-of-truth)
+    void idbPutReminder(rec);
     return;
   }
 
   if (type === "CANCEL_REMINDER") {
     const { id } = payload ?? {};
+    if (!id) return;
     if (reminders.has(id)) { clearTimeout(reminders.get(id).timerId); reminders.delete(id); }
+    void idbDeleteReminder(id);
   }
 });

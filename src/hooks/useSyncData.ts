@@ -181,7 +181,7 @@ export function useSyncData() {
     const initial = setTimeout(push, 30_000);
     const interval = setInterval(push, 5 * 60 * 1000);
 
-    // Listen for BACKGROUND_SYNC messages from the SW (Background Sync API).
+    // Listen for BACKGROUND_SYNC messages from the SW (Chrome/Edge only).
     // When the network returns after offline, the SW pings us to flush queued data.
     const swListener = (e: MessageEvent) => {
       if (e.data?.type === "BACKGROUND_SYNC") {
@@ -193,12 +193,22 @@ export function useSyncData() {
       navigator.serviceWorker.addEventListener("message", swListener);
     }
 
+    // Cross-browser fallback for Safari/Firefox: window 'online' event fires
+    // when the network returns. We flush queued data immediately, bypassing
+    // the 60 s throttle.
+    const onOnlineRecover = () => {
+      lastPushAt.current = 0;
+      void push();
+    };
+    window.addEventListener("online", onOnlineRecover);
+
     return () => {
       clearTimeout(initial);
       clearInterval(interval);
       if ("serviceWorker" in navigator) {
         navigator.serviceWorker.removeEventListener("message", swListener);
       }
+      window.removeEventListener("online", onOnlineRecover);
     };
   }, [session, isOnline, clearPendingDeletes]);
 }
