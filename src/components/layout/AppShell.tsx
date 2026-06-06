@@ -29,23 +29,31 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const router     = useRouter();
   const isOnline   = useOnlineStatus();
   const updateProfile = useAppStore((s) => s.updateProfile);
-  const totalItems    = useAppStore((s) => s.tasks.length + s.journals.length + s.events.length);
   useSyncData();             // periodic background sync (now throttled to 5 min)
   useReminderScheduler();    // re-arm task reminders (every 15 min)
   useKeyboardShortcuts();    // / for AI, Cmd+K for search, T/J/E for new items
   useBackgroundSync();       // register SyncManager so SW gets a sync event on reconnect
 
-  // Emergency safety: if dataset is huge (from the legacy duplication bug),
-  // auto-dedupe on first mount so the app doesn't choke loading 10,000+ items.
+  // Always dedupe on mount AND every 2 minutes after that.
+  // Why both:
+  //   - On mount: cleans anything that came in through the initial sync pull.
+  //   - Periodic: catches duplicates that arrive on later 5-min sync pushes
+  //     from other devices (especially calendar events created on phone +
+  //     desktop near-simultaneously, which legacy data + cross-device sync
+  //     loved to multiply).
+  // Dedup is cheap (Map-grouping, O(n)) — fine to run frequently.
   useEffect(() => {
-    if (totalItems < 1000) return;
-    const store = useAppStore.getState();
-    const removed = store.dedupTasks() + store.dedupJournals() + store.dedupEvents();
-    if (removed > 0) {
-      console.warn(`[AppShell] Auto-removed ${removed} duplicates (had ${totalItems} items)`);
+    function runDedupe() {
+      const store = useAppStore.getState();
+      const removed = store.dedupTasks() + store.dedupJournals() + store.dedupEvents();
+      if (removed > 0) {
+        console.warn(`[AppShell] Auto-removed ${removed} duplicate(s)`);
+      }
     }
-    // Run only once per mount — checking totalItems again would re-trigger.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // First pass after 5 s so the initial sync pull has settled
+    const initial = setTimeout(runDedupe, 5_000);
+    const interval = setInterval(runDedupe, 2 * 60 * 1000);
+    return () => { clearTimeout(initial); clearInterval(interval); };
   }, []);
 
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
