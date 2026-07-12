@@ -113,26 +113,26 @@ function Canvas(width, height) {
   return { fill, rect, roundedRect, gradientV, circle, toPNG };
 }
 
-// ── Brand palette ───────────────────────────────────────────────────────────
-const BG      = [13, 13, 13];      // #0d0d0d
-const PANEL   = [26, 26, 30];      // #1a1a1e
-const CARD    = [33, 33, 38];      // #212126
-const BORDER  = [55, 55, 60];      // subtle border
-const TEXT    = [240, 240, 245];   // bright
-const SUBTLE  = [120, 120, 130];   // muted
-const VIOLET  = [167, 139, 250];   // #a78bfa
-const VIOLET2 = [124, 58, 237];    // #7c3aed
+// ── Brand palette — "Iris ink" dark theme ───────────────────────────────────
+const BG      = [15, 14, 22];      // hsl(252 24% 7%)  — ink-violet background
+const PANEL   = [22, 20, 31];      // hsl(252 20% 10%) — sidebar / card
+const CARD    = [30, 27, 42];      // elevated card
+const BORDER  = [48, 44, 62];      // subtle border
+const TEXT    = [238, 237, 245];   // bright
+const SUBTLE  = [125, 120, 140];   // muted
+const VIOLET  = [152, 113, 244];   // hsl(258 85% 70%) — primary
+const VIOLET2 = [181, 103, 233];   // hsl(276 75% 66%) — brand-to
 const GREEN   = [74, 222, 128];    // success
 const ORANGE  = [251, 146, 60];    // streak
 
 // ── Helpers for common mock UI elements ─────────────────────────────────────
 function drawIconChip(c, x, y, size) {
-  c.gradientV(x, y, size, size, 26, 26, 30, 13, 13, 13);
-  // Subtle violet glow + T glyph (mirrors the real icon)
-  const cx = x + size / 2, cy = y + size / 2;
+  // Brand-gradient chip with a white T glyph (mirrors the real icon)
+  c.gradientV(x, y, size, size, 116, 84, 212, 162, 79, 220);
+  const cx = x + size / 2;
   const tw = Math.max(2, Math.round(size * 0.13));
-  c.rect(x + Math.round(size * 0.27), y + Math.round(size * 0.30), Math.round(size * 0.46), tw, ...VIOLET);
-  c.rect(cx - Math.floor(tw / 2), y + Math.round(size * 0.30) + tw, tw, Math.round(size * 0.34), ...VIOLET);
+  c.rect(x + Math.round(size * 0.27), y + Math.round(size * 0.30), Math.round(size * 0.46), tw, 255, 255, 255);
+  c.rect(cx - Math.floor(tw / 2), y + Math.round(size * 0.30) + tw, tw, Math.round(size * 0.34), 255, 255, 255);
 }
 
 function drawTextBar(c, x, y, w, h, colour) {

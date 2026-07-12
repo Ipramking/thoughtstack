@@ -2,44 +2,50 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ─── Design tokens ─────────────────────────────────────────────────────────── */
+/* ─── Design tokens — "Iris ink" theme ──────────────────────────────────────────
+   Light: warm violet-tinted paper with an iris (violet-indigo) brand colour.
+   Dark:  deep ink-violet (never pure black) with a luminous iris accent.       */
 @layer base {
   :root {
-    --background:           0 0% 98%;
-    --foreground:           0 0% 6%;
+    --background:           252 45% 98%;
+    --foreground:           252 25% 10%;
     --card:                 0 0% 100%;
-    --card-foreground:      0 0% 6%;
+    --card-foreground:      252 25% 10%;
     --popover:              0 0% 100%;
-    --popover-foreground:   0 0% 6%;
-    --primary:              0 0% 8%;
-    --primary-foreground:   0 0% 98%;
-    --secondary:            0 0% 93%;
-    --secondary-foreground: 0 0% 8%;
-    --muted:                0 0% 93%;
-    --muted-foreground:     0 0% 45%;
-    --accent:               0 0% 91%;
-    --accent-foreground:    0 0% 8%;
+    --popover-foreground:   252 25% 10%;
+    --primary:              256 62% 55%;
+    --primary-foreground:   0 0% 100%;
+    --secondary:            252 25% 94%;
+    --secondary-foreground: 252 25% 12%;
+    --muted:                252 25% 94%;
+    --muted-foreground:     252 10% 42%;
+    --accent:               256 45% 93%;
+    --accent-foreground:    256 50% 32%;
     --destructive:          0 72% 51%;
     --destructive-foreground: 0 0% 98%;
-    --border:               0 0% 87%;
-    --input:                0 0% 87%;
-    --ring:                 0 0% 8%;
+    --border:               252 20% 89%;
+    --input:                252 20% 89%;
+    --ring:                 256 62% 55%;
     --radius:               0.75rem;
 
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3:  30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
+    /* Brand gradient endpoints (violet → purple) */
+    --brand-from: 256 62% 55%;
+    --brand-to:   276 65% 58%;
 
-    --sidebar-background:         0 0% 96%;
-    --sidebar-foreground:         0 0% 28%;
-    --sidebar-primary:            0 0% 8%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent:             0 0% 91%;
-    --sidebar-accent-foreground:  0 0% 8%;
-    --sidebar-border:             0 0% 87%;
-    --sidebar-ring:               0 0% 60%;
+    --chart-1: 256 62% 55%;
+    --chart-2: 172 60% 40%;
+    --chart-3:  32 90% 52%;
+    --chart-4: 340 72% 55%;
+    --chart-5: 210 80% 52%;
+
+    --sidebar-background:         252 40% 96.5%;
+    --sidebar-foreground:         252 12% 32%;
+    --sidebar-primary:            256 62% 55%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent:             256 40% 92%;
+    --sidebar-accent-foreground:  256 50% 32%;
+    --sidebar-border:             252 20% 89%;
+    --sidebar-ring:               256 62% 55%;
 
     /* Safe-area env vars */
     --sat: env(safe-area-inset-top);
@@ -52,40 +58,43 @@
   }
 
   .dark {
-    --background:           0 0% 4%;
-    --foreground:           0 0% 95%;
-    --card:                 0 0% 7%;
-    --card-foreground:      0 0% 95%;
-    --popover:              0 0% 7%;
-    --popover-foreground:   0 0% 95%;
-    --primary:              0 0% 95%;
-    --primary-foreground:   0 0% 7%;
-    --secondary:            0 0% 11%;
-    --secondary-foreground: 0 0% 95%;
-    --muted:                0 0% 11%;
-    --muted-foreground:     0 0% 60%;
-    --accent:               0 0% 13%;
-    --accent-foreground:    0 0% 95%;
-    --destructive:          0 62% 50%;
+    --background:           252 24% 7%;
+    --foreground:           252 15% 93%;
+    --card:                 252 20% 10%;
+    --card-foreground:      252 15% 93%;
+    --popover:              252 20% 10%;
+    --popover-foreground:   252 15% 93%;
+    --primary:              258 85% 70%;
+    --primary-foreground:   256 40% 12%;
+    --secondary:            252 16% 14%;
+    --secondary-foreground: 252 15% 93%;
+    --muted:                252 16% 14%;
+    --muted-foreground:     252 10% 64%;
+    --accent:               256 28% 18%;
+    --accent-foreground:    256 60% 85%;
+    --destructive:          0 65% 55%;
     --destructive-foreground: 0 0% 98%;
-    --border:               0 0% 14%;
-    --input:                0 0% 14%;
-    --ring:                 0 0% 82%;
+    --border:               252 16% 16%;
+    --input:                252 16% 16%;
+    --ring:                 258 85% 70%;
 
-    --chart-1: 220 70% 62%;
-    --chart-2: 160 60% 56%;
-    --chart-3:  30 80% 62%;
-    --chart-4: 280 65% 66%;
-    --chart-5: 340 75% 62%;
+    --brand-from: 258 85% 68%;
+    --brand-to:   276 75% 66%;
 
-    --sidebar-background:         0 0% 6%;
-    --sidebar-foreground:         0 0% 72%;
-    --sidebar-primary:            0 0% 95%;
-    --sidebar-primary-foreground: 0 0% 6%;
-    --sidebar-accent:             0 0% 11%;
-    --sidebar-accent-foreground:  0 0% 95%;
-    --sidebar-border:             0 0% 13%;
-    --sidebar-ring:               0 0% 40%;
+    --chart-1: 258 85% 70%;
+    --chart-2: 172 60% 52%;
+    --chart-3:  32 90% 60%;
+    --chart-4: 340 75% 64%;
+    --chart-5: 210 85% 62%;
+
+    --sidebar-background:         252 24% 8.5%;
+    --sidebar-foreground:         252 10% 72%;
+    --sidebar-primary:            258 85% 70%;
+    --sidebar-primary-foreground: 256 40% 12%;
+    --sidebar-accent:             256 24% 16%;
+    --sidebar-accent-foreground:  256 60% 85%;
+    --sidebar-border:             252 16% 15%;
+    --sidebar-ring:               258 85% 70%;
   }
 }
 
@@ -191,8 +200,20 @@
   .ambient-bg::before {
     content: ''; position: absolute; inset: 0; pointer-events: none;
     background:
-      radial-gradient(ellipse 60% 40% at 20% 10%, hsl(var(--primary) / 0.04) 0%, transparent 60%),
-      radial-gradient(ellipse 50% 40% at 80% 90%, hsl(220 70% 60% / 0.04) 0%, transparent 60%);
+      radial-gradient(ellipse 60% 40% at 20% 10%, hsl(var(--brand-from) / 0.08) 0%, transparent 60%),
+      radial-gradient(ellipse 50% 40% at 80% 90%, hsl(var(--brand-to) / 0.06) 0%, transparent 60%);
+  }
+
+  /* ── Brand gradient (logo blocks, AI buttons, hero accents) ── */
+  .brand-gradient {
+    background: linear-gradient(135deg, hsl(var(--brand-from)) 0%, hsl(var(--brand-to)) 100%);
+    color: hsl(var(--primary-foreground));
+  }
+  .brand-text-gradient {
+    background: linear-gradient(120deg, hsl(var(--brand-from)) 0%, hsl(var(--brand-to)) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
   }
 
   /* ── Skeleton shimmer ── */

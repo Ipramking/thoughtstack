@@ -44,7 +44,7 @@ export function EmptyState({
         )}
       >
         {/* Soft inner glow */}
-        <div className="absolute inset-1 rounded-2xl bg-gradient-to-br from-primary/5 to-transparent pointer-events-none" />
+        <div className="absolute inset-1 rounded-2xl bg-gradient-to-br from-primary/10 to-transparent pointer-events-none" />
         <Icon className="w-8 h-8 text-muted-foreground relative z-10" strokeWidth={1.5} />
       </div>
 

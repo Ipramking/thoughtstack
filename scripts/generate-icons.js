@@ -55,17 +55,16 @@ function buildPNG(size) {
   ihdr[10] = 0; ihdr[11] = 0; ihdr[12] = 0;
 
   // ── Palette ───────────────────────────────────────────────────────────────
-  // Background: subtle dark gradient that matches the app's #0d0d0d theme.
-  // Top edge slightly lifted (#1a1a1a) for depth, bottom is the app's bg.
-  const topR = 26,  topG = 26,  topB = 30;     // #1a1a1e
-  const botR = 13,  botG = 13,  botB = 13;     // #0d0d0d
+  // Background: the "Iris ink" brand gradient (violet → purple), matching the
+  // .brand-gradient utility and the in-app generated icons.
+  const topR = 116, topG = 84,  topB = 212;    // #7454d4 (brand-from)
+  const botR = 162, botG = 79,  botB = 220;    // #a24fdc (brand-to)
 
-  // T glyph: vibrant violet — matches the brand purple-600 accent used in
-  // the AI panel, but on a dark canvas instead of competing with one.
-  const fgR  = 167, fgG  = 139, fgB  = 250;    // #a78bfa (violet-400)
+  // T glyph: white — sits on the saturated gradient.
+  const fgR  = 255, fgG  = 255, fgB  = 255;    // #ffffff
 
-  // Subtle radial glow behind the T for depth — tiny lift towards violet.
-  const glowR = 109, glowG = 40, glowB = 217;  // #6d28d9 (violet-700)
+  // Subtle radial glow behind the T for depth — lift towards a lighter iris.
+  const glowR = 196, glowG = 168, glowB = 255; // #c4a8ff
 
   // ── Glyph: bold "T" centred in the inner 60% (maskable safe zone) ─────────
   const thick = Math.max(2, Math.round(size * 0.13));

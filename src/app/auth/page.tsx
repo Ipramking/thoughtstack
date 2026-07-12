@@ -71,16 +71,16 @@ function LoginForm({ onSwitch }: { onSwitch: () => void }) {
   return (
     <div className="w-full max-w-sm">
       <div className="flex items-center gap-3 mb-8">
-        <div className="w-10 h-10 rounded-xl bg-foreground flex items-center justify-center shadow-lg">
-          <Brain className="w-5 h-5 text-background" />
+        <div className="w-10 h-10 rounded-xl brand-gradient flex items-center justify-center shadow-lg shadow-primary/25">
+          <Brain className="w-5 h-5 text-white" />
         </div>
         <div>
-          <p className="font-bold text-lg leading-none">ThoughtStack</p>
+          <p className="font-display font-bold text-lg leading-none">ThoughtStack</p>
           <p className="text-xs text-muted-foreground">Your Personal OS</p>
         </div>
       </div>
 
-      <h1 className="text-2xl font-bold mb-1">Welcome back</h1>
+      <h1 className="text-2xl font-display font-bold mb-1">Welcome back</h1>
       <p className="text-sm text-muted-foreground mb-7">Sign in to your workspace.</p>
 
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -120,7 +120,7 @@ function LoginForm({ onSwitch }: { onSwitch: () => void }) {
 
       <p className="text-sm text-muted-foreground text-center mt-6">
         Don&apos;t have an account?{" "}
-        <button onClick={onSwitch} className="text-foreground font-medium hover:underline">
+        <button onClick={onSwitch} className="text-primary font-medium hover:underline">
           Request access
         </button>
       </p>
@@ -181,16 +181,16 @@ function SignupForm({ onSwitch }: { onSwitch: () => void }) {
   return (
     <div className="w-full max-w-sm">
       <div className="flex items-center gap-3 mb-8">
-        <div className="w-10 h-10 rounded-xl bg-foreground flex items-center justify-center shadow-lg">
-          <Brain className="w-5 h-5 text-background" />
+        <div className="w-10 h-10 rounded-xl brand-gradient flex items-center justify-center shadow-lg shadow-primary/25">
+          <Brain className="w-5 h-5 text-white" />
         </div>
         <div>
-          <p className="font-bold text-lg leading-none">ThoughtStack</p>
+          <p className="font-display font-bold text-lg leading-none">ThoughtStack</p>
           <p className="text-xs text-muted-foreground">Request access</p>
         </div>
       </div>
 
-      <h1 className="text-2xl font-bold mb-1">Create account</h1>
+      <h1 className="text-2xl font-display font-bold mb-1">Create account</h1>
       <p className="text-sm text-muted-foreground mb-7">
         Submit your details — the admin will approve your account.
       </p>
@@ -244,7 +244,7 @@ function SignupForm({ onSwitch }: { onSwitch: () => void }) {
 
       <p className="text-sm text-muted-foreground text-center mt-4">
         Already have an account?{" "}
-        <button onClick={onSwitch} className="text-foreground font-medium hover:underline">
+        <button onClick={onSwitch} className="text-primary font-medium hover:underline">
           Sign in
         </button>
       </p>
@@ -269,13 +269,13 @@ export default function AuthPage() {
       </div>
 
       {/* ── Feature showcase (desktop) ── */}
-      <div className="hidden lg:flex flex-1 flex-col justify-center px-12 bg-muted/30 border-l border-border">
-        <div className="max-w-sm">
-          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-6">
+      <div className="hidden lg:flex flex-1 flex-col justify-center px-12 bg-muted/30 border-l border-border ambient-bg">
+        <div className="max-w-sm relative">
+          <p className="text-xs font-semibold uppercase tracking-widest text-primary mb-6">
             Everything in one place
           </p>
-          <h2 className="text-3xl font-bold mb-3">
-            An OS for your <span className="text-muted-foreground">mind</span>
+          <h2 className="text-3xl font-display font-bold mb-3">
+            An OS for your <span className="brand-text-gradient">mind</span>
           </h2>
           <p className="text-sm text-muted-foreground mb-10">
             ThoughtStack connects your tasks, journals, learning, and calendar — with an AI

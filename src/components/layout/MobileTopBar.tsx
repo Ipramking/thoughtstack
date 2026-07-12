@@ -45,7 +45,7 @@ export function MobileTopBar({ onMenuClick }: MobileTopBarProps) {
           <Menu className="w-5 h-5" />
         </button>
 
-        <p className="flex-1 text-center text-[15px] font-semibold tracking-tight">{title}</p>
+        <p className="flex-1 text-center text-[15px] font-display font-semibold tracking-tight">{title}</p>
 
         <button
           onClick={() => setSearchOpen(true)}
@@ -60,7 +60,7 @@ export function MobileTopBar({ onMenuClick }: MobileTopBarProps) {
           className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-muted transition-colors"
           aria-label="Open Thoughts AI"
         >
-          <Brain className="w-5 h-5" />
+          <Brain className="w-5 h-5 text-primary" />
         </button>
       </header>
 

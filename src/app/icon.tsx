@@ -11,7 +11,7 @@ export default function Icon() {
         style={{
           width: "100%", height: "100%",
           display: "flex", alignItems: "center", justifyContent: "center",
-          background: "#0d0d0d",
+          background: "linear-gradient(135deg, #7454d4 0%, #a24fdc 100%)",
           borderRadius: "112px",   // ~22% of 512px — matches iOS squircle
         }}
       >

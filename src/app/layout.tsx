@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import { Inter, Sora } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/layout/ThemeProvider";
 import { AppShell } from "@/components/layout/AppShell";
@@ -8,11 +8,12 @@ import { ServiceWorkerRegister } from "@/components/layout/ServiceWorkerRegister
 import { SessionWrapper } from "@/components/layout/SessionWrapper";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
+const sora  = Sora({ subsets: ["latin"], variable: "--font-sora", weight: ["600", "700", "800"] });
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: dark)",  color: "#0d0d0d" },
-    { media: "(prefers-color-scheme: light)", color: "#f9f9f9" },
+    { media: "(prefers-color-scheme: dark)",  color: "#100e19" },
+    { media: "(prefers-color-scheme: light)", color: "#fafafe" },
   ],
   width:           "device-width",
   initialScale:    1,
@@ -48,7 +49,7 @@ export const metadata: Metadata = {
     "apple-mobile-web-app-status-bar-style": "black-translucent",
     "apple-mobile-web-app-title":     "ThoughtStack",
     // MS tile
-    "msapplication-TileColor":        "#0d0d0d",
+    "msapplication-TileColor":        "#100e19",
     "msapplication-tap-highlight":    "no",
   },
 };
@@ -61,7 +62,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="apple-touch-startup-image" href="/icon-512.png" />
         <link rel="apple-touch-icon" href="/icon-192.png" />
       </head>
-      <body className={`${inter.variable} font-sans antialiased`}>
+      <body className={`${inter.variable} ${sora.variable} font-sans antialiased`}>
         <SessionWrapper>
           <ThemeProvider attribute="class" defaultTheme="system" enableSystem={true}>
             <AppShell>{children}</AppShell>

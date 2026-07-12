@@ -89,7 +89,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   if (status === "loading" && isOnline) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="w-6 h-6 border-2 border-foreground border-t-transparent rounded-full animate-spin" />
+        <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }

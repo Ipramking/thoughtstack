@@ -45,14 +45,14 @@ function NavItem({
         "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150",
         collapsed && "justify-center px-2.5",
         active
-          ? "bg-foreground/8 text-foreground"
+          ? "bg-primary/10 text-primary"
           : "text-muted-foreground hover:bg-muted hover:text-foreground",
       )}
     >
       <Icon className={cn("w-[18px] h-[18px] shrink-0", active && "stroke-[2.2]")} />
       {!collapsed && <span className="truncate">{label}</span>}
       {active && !collapsed && (
-        <span className="ml-auto w-1.5 h-1.5 rounded-full bg-foreground shrink-0" />
+        <span className="ml-auto w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
       )}
     </Link>
   );
@@ -102,12 +102,12 @@ export function Sidebar({ mobileOpen, onClose }: SidebarProps) {
           "flex items-center gap-3 px-4 py-5 border-b border-sidebar-border shrink-0",
           sidebarCollapsed && "md:justify-center md:px-3",
         )}>
-          <div className="w-8 h-8 rounded-xl bg-foreground flex items-center justify-center shrink-0 shadow-sm">
-            <Brain className="w-4 h-4 text-background" />
+          <div className="w-8 h-8 rounded-xl brand-gradient flex items-center justify-center shrink-0 shadow-sm">
+            <Brain className="w-4 h-4 text-white" />
           </div>
           {!sidebarCollapsed && (
             <div className="min-w-0">
-              <p className="font-bold text-sm tracking-tight text-sidebar-foreground leading-none">ThoughtStack</p>
+              <p className="font-display font-bold text-sm tracking-tight text-sidebar-foreground leading-none">ThoughtStack</p>
               <p className="text-[10px] text-muted-foreground mt-0.5">Personal OS</p>
             </div>
           )}
@@ -158,7 +158,7 @@ export function Sidebar({ mobileOpen, onClose }: SidebarProps) {
               {!sidebarCollapsed && <div className="border-t border-sidebar-border mx-1" />}
               <div className="space-y-0.5">
                 {!sidebarCollapsed && (
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-blue-400/60 px-3 pb-2">Admin</p>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-primary/60 px-3 pb-2">Admin</p>
                 )}
                 <NavItem
                   href="/admin"
@@ -200,7 +200,7 @@ export function Sidebar({ mobileOpen, onClose }: SidebarProps) {
               title="Thoughts AI"
               className="flex-1 flex items-center gap-2 px-2.5 py-2 rounded-xl text-sm hover:bg-sidebar-accent transition-colors"
             >
-              <Brain className="w-4 h-4 shrink-0" />
+              <Brain className="w-4 h-4 shrink-0 text-primary" />
               {!sidebarCollapsed && <span className="text-xs font-medium">Thoughts AI</span>}
             </button>
             <button

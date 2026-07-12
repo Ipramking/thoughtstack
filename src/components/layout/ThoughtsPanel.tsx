@@ -147,8 +147,8 @@ export function ThoughtsPanel() {
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-foreground flex items-center justify-center shrink-0">
-              <Brain className="w-4 h-4 text-background" />
+            <div className="w-8 h-8 rounded-xl brand-gradient flex items-center justify-center shrink-0">
+              <Brain className="w-4 h-4 text-white" />
             </div>
             <div>
               <p className="font-semibold text-sm leading-none">Thoughts AI</p>
@@ -187,10 +187,10 @@ export function ThoughtsPanel() {
             {/* Empty state */}
             {messages.length === 0 && (
               <div className="flex flex-col items-center text-center pt-4 pb-2">
-                <div className="w-14 h-14 rounded-2xl bg-foreground flex items-center justify-center mb-4 shadow-lg">
-                  <Brain className="w-7 h-7 text-background" />
+                <div className="w-14 h-14 rounded-2xl brand-gradient flex items-center justify-center mb-4 shadow-lg shadow-primary/25">
+                  <Brain className="w-7 h-7 text-white" />
                 </div>
-                <p className="text-base font-bold">Hey, I&apos;m Thoughts</p>
+                <p className="text-base font-display font-bold">Hey, I&apos;m Thoughts</p>
                 <p className="text-xs text-muted-foreground mt-1 max-w-[220px] leading-relaxed">
                   I know your tasks and schedule. Ask me anything or just dump your thoughts.
                 </p>

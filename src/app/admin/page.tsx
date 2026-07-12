@@ -135,12 +135,12 @@ export default function AdminPage() {
   const filtered = filter === "all" ? users : users.filter((u) => u.status === filter);
 
   return (
-    <div className="min-h-screen p-6 space-y-6 animate-fade-in max-w-4xl">
+    <div className="min-h-screen ambient-bg p-6 space-y-6 animate-fade-in max-w-4xl">
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Shield className="w-6 h-6 text-blue-400" /> Admin Panel
+          <h1 className="text-2xl font-display font-bold flex items-center gap-2">
+            <Shield className="w-6 h-6 text-primary" /> Admin Panel
           </h1>
           <p className="text-muted-foreground text-sm mt-0.5">
             Manage user access to ThoughtStack

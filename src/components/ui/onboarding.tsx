@@ -15,7 +15,7 @@ export function Onboarding() {
 
   const STEPS = [
     {
-      icon: Brain, color: "bg-foreground", iconColor: "text-background",
+      icon: Brain, color: "brand-gradient shadow-primary/25", iconColor: "text-white",
       title: "Welcome to ThoughtStack",
       subtitle: "Your AI-powered personal OS",
       body: "Capture thoughts, manage tasks, journal your days — and let Thoughts AI connect it all for you.",
@@ -62,7 +62,7 @@ export function Onboarding() {
           {STEPS.map((_, i) => (
             <div key={i} className={cn(
               "rounded-full transition-all duration-300",
-              i === step ? "w-6 h-2 bg-foreground" : "w-2 h-2 bg-muted-foreground/30",
+              i === step ? "w-6 h-2 bg-primary" : "w-2 h-2 bg-muted-foreground/30",
             )} />
           ))}
         </div>
@@ -74,7 +74,7 @@ export function Onboarding() {
 
         {/* Text */}
         <div className="space-y-2">
-          <h1 className="text-2xl font-bold tracking-tight">{current.title}</h1>
+          <h1 className="text-2xl font-display font-bold tracking-tight">{current.title}</h1>
           <p className="text-sm font-medium text-primary">{current.subtitle}</p>
           <p className="text-sm text-muted-foreground leading-relaxed max-w-[280px] mx-auto">{current.body}</p>
         </div>
@@ -99,7 +99,7 @@ export function Onboarding() {
             className={cn(
               "w-full flex items-center justify-center gap-2 py-3.5 px-6 rounded-2xl font-semibold text-sm transition-all",
               canAdvance
-                ? "bg-foreground text-background hover:opacity-90 active:scale-95"
+                ? "brand-gradient hover:opacity-90 active:scale-95 shadow-md shadow-primary/25"
                 : "bg-muted text-muted-foreground cursor-not-allowed",
             )}
           >

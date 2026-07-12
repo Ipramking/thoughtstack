@@ -13,6 +13,7 @@ import { ThoughtsAction, ThoughtsContext } from "@/types";
 import { cn, isToday, formatDate } from "@/lib/utils";
 import { toast } from "@/hooks/useToast";
 import { format } from "date-fns";
+import { SectionLabel } from "@/components/ui/section-label";
 
 const PRIORITY_DOT: Record<string, string> = {
   low:      "bg-blue-400",
@@ -105,8 +106,8 @@ export default function HomePage() {
         <div className="flex items-start justify-between">
           <div>
             <p className="text-xs text-muted-foreground font-medium">{formatDate(new Date())}</p>
-            <h1 className="text-2xl font-bold tracking-tight mt-0.5">
-              {GREET()}, {firstName} 👋
+            <h1 className="text-2xl font-display font-bold tracking-tight mt-0.5">
+              {GREET()}, <span className="brand-text-gradient">{firstName}</span> 👋
             </h1>
           </div>
           <div className="flex items-center gap-2">
@@ -118,9 +119,9 @@ export default function HomePage() {
             )}
             <button
               onClick={toggleThoughtsPanel}
-              className="w-10 h-10 rounded-2xl bg-foreground flex items-center justify-center shrink-0 shadow-sm hover:opacity-90 transition-opacity active:scale-95"
+              className="w-10 h-10 rounded-2xl brand-gradient flex items-center justify-center shrink-0 shadow-md shadow-primary/25 hover:opacity-90 transition-opacity active:scale-95"
             >
-              <Brain className="w-5 h-5 text-background" />
+              <Brain className="w-5 h-5 text-white" />
             </button>
           </div>
         </div>
@@ -161,8 +162,8 @@ export default function HomePage() {
           {aiResult && (
             <div className="rounded-2xl border border-border bg-card p-4 space-y-3 animate-fade-up">
               <div className="flex items-start gap-2">
-                <div className="w-6 h-6 rounded-lg bg-foreground flex items-center justify-center shrink-0 mt-0.5">
-                  <Brain className="w-3.5 h-3.5 text-background" />
+                <div className="w-6 h-6 rounded-lg brand-gradient flex items-center justify-center shrink-0 mt-0.5">
+                  <Brain className="w-3.5 h-3.5 text-white" />
                 </div>
                 <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap flex-1">{aiResult.reply}</p>
               </div>
@@ -189,14 +190,16 @@ export default function HomePage() {
 
         {/* ── Today's Focus ── */}
         <div className="space-y-2">
-          <div className="flex items-center justify-between px-1">
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-              <Flame className="w-3.5 h-3.5 text-orange-400" /> Today&apos;s Focus
-            </p>
-            <Link href="/tasks" className="text-[11px] text-muted-foreground hover:text-foreground flex items-center gap-0.5 transition-colors">
-              View all <ArrowRight className="w-3 h-3" />
-            </Link>
-          </div>
+          <SectionLabel
+            icon={<Flame className="w-3.5 h-3.5 text-orange-400" />}
+            action={
+              <Link href="/tasks" className="text-[11px] text-muted-foreground hover:text-primary flex items-center gap-0.5 transition-colors">
+                View all <ArrowRight className="w-3 h-3" />
+              </Link>
+            }
+          >
+            Today&apos;s Focus
+          </SectionLabel>
 
           {todayTasks.length === 0 ? (
             <div className="flex flex-col items-center gap-2 py-8 rounded-2xl border border-dashed border-border text-center">
@@ -244,14 +247,16 @@ export default function HomePage() {
         {/* ── Today's Events ── */}
         {todayEvents.length > 0 && (
           <div className="space-y-2">
-            <div className="flex items-center justify-between px-1">
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                <Calendar className="w-3.5 h-3.5 text-purple-400" /> Today&apos;s Schedule
-              </p>
-              <Link href="/calendar" className="text-[11px] text-muted-foreground hover:text-foreground flex items-center gap-0.5 transition-colors">
-                Calendar <ArrowRight className="w-3 h-3" />
-              </Link>
-            </div>
+            <SectionLabel
+              icon={<Calendar className="w-3.5 h-3.5 text-chart-5" />}
+              action={
+                <Link href="/calendar" className="text-[11px] text-muted-foreground hover:text-primary flex items-center gap-0.5 transition-colors">
+                  Calendar <ArrowRight className="w-3 h-3" />
+                </Link>
+              }
+            >
+              Today&apos;s Schedule
+            </SectionLabel>
             <div className="rounded-2xl border border-border bg-card overflow-hidden divide-y divide-border">
               {todayEvents.slice(0, 3).map((event) => (
                 <div key={event.id} className="flex items-center gap-3 px-4 py-3">
@@ -269,14 +274,16 @@ export default function HomePage() {
 
         {/* ── Recent Journal ── */}
         <div className="space-y-2">
-          <div className="flex items-center justify-between px-1">
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-              <BookOpen className="w-3.5 h-3.5 text-green-400" /> Latest Journal
-            </p>
-            <Link href="/journal" className="text-[11px] text-muted-foreground hover:text-foreground flex items-center gap-0.5 transition-colors">
-              All entries <ArrowRight className="w-3 h-3" />
-            </Link>
-          </div>
+          <SectionLabel
+            icon={<BookOpen className="w-3.5 h-3.5 text-chart-2" />}
+            action={
+              <Link href="/journal" className="text-[11px] text-muted-foreground hover:text-primary flex items-center gap-0.5 transition-colors">
+                All entries <ArrowRight className="w-3 h-3" />
+              </Link>
+            }
+          >
+            Latest Journal
+          </SectionLabel>
 
           {recentEntry ? (
             <Link href="/journal">
