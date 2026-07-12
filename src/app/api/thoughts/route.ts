@@ -1,14 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { auth } from "@/auth";
 import { ThoughtsContext } from "@/types";
 
 // ── Clients ───────────────────────────────────────────────────────────────────
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const genAI     = new GoogleGenerativeAI(process.env.GEMINI_API_KEY ?? "");
 
+// ── Rate limit ────────────────────────────────────────────────────────────────
+// Per-instance sliding window (resets on cold start — good enough to stop a
+// runaway client or a stolen session from burning through API credits).
+const RATE_LIMIT = 20;                 // requests
+const RATE_WINDOW_MS = 5 * 60 * 1000;  // per 5 minutes
+const hits = new Map<string, number[]>();
+
+function rateLimited(key: string): boolean {
+  const now = Date.now();
+  const recent = (hits.get(key) ?? []).filter((t) => now - t < RATE_WINDOW_MS);
+  if (recent.length >= RATE_LIMIT) { hits.set(key, recent); return true; }
+  recent.push(now);
+  hits.set(key, recent);
+  return false;
+}
+
 // ── System prompt ─────────────────────────────────────────────────────────────
-const BASE_SYSTEM = `You are Thoughts — the intelligent AI assistant inside ThoughtStack, a personal operating system app.
+const baseSystem = () => `You are Thoughts — the intelligent AI assistant inside ThoughtStack, a personal operating system app.
 
 Your personality: warm, concise, proactive, and smart. You speak like a knowledgeable friend, not a formal assistant.
 
@@ -32,9 +49,12 @@ Rules:
 - Event types: task, meeting, reminder, personal, study`;
 
 function buildSystemPrompt(context?: ThoughtsContext): string {
-  if (!context) return BASE_SYSTEM;
+  // Rebuilt per request — a module-level constant would freeze "Today's date"
+  // on warm serverless instances.
+  const base = baseSystem();
+  if (!context) return base;
 
-  const parts: string[] = [BASE_SYSTEM, "\n\n── USER CONTEXT (use this to give personalised answers) ──"];
+  const parts: string[] = [base, "\n\n── USER CONTEXT (use this to give personalised answers) ──"];
 
   if (context.todayTasks.length > 0) {
     const taskLines = context.todayTasks
@@ -120,6 +140,14 @@ async function tryGemini(
 
 // ── Route handler ─────────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
+  const session = await auth();
+  if (!session?.user?.email) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (rateLimited(session.user.email)) {
+    return NextResponse.json({ error: "rate_limited" }, { status: 429 });
+  }
+
   const { message, history, context } = await req.json() as {
     message: string;
     history: Array<{ role: "user" | "assistant"; content: string }>;

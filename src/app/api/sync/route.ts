@@ -70,12 +70,32 @@ export async function POST(req: NextRequest) {
   };
 
   if (!TABLE[type]) return NextResponse.json({ error: "Invalid type" }, { status: 400 });
+  if (!Array.isArray(items) || items.length === 0) {
+    return NextResponse.json({ ok: true, synced: 0 });
+  }
 
-  const rows = items.map((item) => ({ ...item, user_email: email }));
-  const { error } = await supabase.from(TABLE[type]).upsert(rows, { onConflict: "id" });
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  // Ownership guard: id is a global primary key, so an upsert would happily
+  // overwrite a row that belongs to a different user (and re-stamp user_email,
+  // hijacking it). Drop any incoming id that already exists under another user.
+  const { data: existing, error: lookupError } = await supabase
+    .from(TABLE[type])
+    .select("id, user_email")
+    .in("id", items.map((i) => i.id));
+  if (lookupError) return NextResponse.json({ error: lookupError.message }, { status: 500 });
 
-  return NextResponse.json({ ok: true, synced: items.length });
+  const foreignIds = new Set(
+    (existing ?? []).filter((r) => r.user_email !== email).map((r) => r.id),
+  );
+  const rows = items
+    .filter((item) => !foreignIds.has(item.id))
+    .map((item) => ({ ...item, user_email: email }));
+
+  if (rows.length > 0) {
+    const { error } = await supabase.from(TABLE[type]).upsert(rows, { onConflict: "id" });
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ ok: true, synced: rows.length, skipped: foreignIds.size });
 }
 
 /**

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import webpush from "web-push";
+import { auth } from "@/auth";
 
 interface WebPushError {
   statusCode?: number;
@@ -8,6 +9,11 @@ interface WebPushError {
 }
 
 export async function POST(req: NextRequest) {
+  const session = await auth();
+  if (!session?.user?.email) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const { subscription, title, body, url } = await req.json() as {
     subscription: webpush.PushSubscription;
     title:        string;
