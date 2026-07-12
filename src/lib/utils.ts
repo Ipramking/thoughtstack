@@ -43,5 +43,10 @@ export function isTomorrow(date: Date | string): boolean {
 }
 
 export function generateId(): string {
+  // ids are global primary keys in the sync tables — they must be unguessable.
+  // crypto.randomUUID needs a secure context; fall back for old WebViews.
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
   return Math.random().toString(36).slice(2, 11) + Date.now().toString(36);
 }

@@ -259,12 +259,12 @@ export const useAppStore = create<AppState>()(
       // ── Calendar ─────────────────────────────────────────────────────────
       events: [],
       addEvent: (event) => {
-        const e: CalendarEvent = { ...event, id: generateId(), createdAt: now() };
+        const e: CalendarEvent = { ...event, id: generateId(), createdAt: now(), updatedAt: now() };
         set((s) => ({ events: [e, ...s.events] }));
         return e;
       },
       updateEvent: (id, u) =>
-        set((s) => ({ events: s.events.map((e) => e.id === id ? { ...e, ...u } : e) })),
+        set((s) => ({ events: s.events.map((e) => e.id === id ? { ...e, ...u, updatedAt: now() } : e) })),
       deleteEvent: (id) => set((s) => ({
         events: s.events.filter((e) => e.id !== id),
         pendingDeletes: { ...s.pendingDeletes, events: [...s.pendingDeletes.events, id] },
@@ -272,8 +272,8 @@ export const useAppStore = create<AppState>()(
       upsertEvent: (event) => set((s) => {
         const existing = s.events.find((e) => e.id === event.id);
         if (!existing) return { events: [event, ...s.events] };
-        const localTs  = existing.createdAt ?? "0";
-        const remoteTs = event.createdAt    ?? "0";
+        const localTs  = existing.updatedAt ?? existing.createdAt ?? "0";
+        const remoteTs = event.updatedAt    ?? event.createdAt    ?? "0";
         if (remoteTs > localTs) {
           return { events: s.events.map((e) => e.id === event.id ? event : e) };
         }

@@ -70,6 +70,7 @@ export interface CalendarEvent {
   location?: Location;
   reminder?: boolean;
   createdAt: string;
+  updatedAt?: string;  // set on every edit — drives sync conflict resolution
 }
 
 // ─── Habits ───────────────────────────────────────────────────────────────────

@@ -17,14 +17,33 @@ const CHUNK_SIZE = 100;
 // until the user runs "Remove duplicates". Prevents catastrophic uploads.
 const MAX_ITEMS_PER_TYPE = 5000;
 
+// Delta-sync marker: only items touched after this timestamp get pushed.
+// Per-device (localStorage) — each device tracks what IT has already sent.
+// Only advanced after a fully successful push cycle, so a failed/offline
+// push means everything is retried next cycle instead of silently lost.
+const LAST_PUSH_KEY = "thoughtstack-last-push";
+
+function getLastPush(): string {
+  try { return localStorage.getItem(LAST_PUSH_KEY) ?? ""; } catch { return ""; }
+}
+function setLastPush(ts: string): void {
+  try { localStorage.setItem(LAST_PUSH_KEY, ts); } catch {/* private mode */}
+}
+
+type Stamped = { updatedAt?: string; createdAt?: string };
+/** Exported for tests — the delta-sync filter. */
+export const touchedSince = <T extends Stamped>(items: T[], since: string): T[] =>
+  since ? items.filter((i) => (i.updatedAt ?? i.createdAt ?? "") > since) : items;
+
+/** Push one type in chunks. Returns true only if EVERY chunk was accepted. */
 async function pushChunked<T extends { id: string; updatedAt?: string; createdAt?: string }>(
   type: "tasks" | "journals" | "events",
   items: T[],
-): Promise<void> {
-  if (!items.length) return;
+): Promise<boolean> {
+  if (!items.length) return true;
   if (items.length > MAX_ITEMS_PER_TYPE) {
     console.warn(`[sync] Refusing to push ${items.length} ${type} — exceeds safety cap. Run "Remove duplicates" in Settings.`);
-    return;
+    return false;
   }
 
   const toRow = (item: T) => ({
@@ -33,28 +52,35 @@ async function pushChunked<T extends { id: string; updatedAt?: string; createdAt
     updated_at: item.updatedAt ?? item.createdAt ?? new Date().toISOString(),
   });
 
+  let allOk = true;
   for (let i = 0; i < items.length; i += CHUNK_SIZE) {
     const chunk = items.slice(i, i + CHUNK_SIZE).map(toRow);
     try {
-      await fetch("/api/sync", {
+      const res = await fetch("/api/sync", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ type, items: chunk }),
       });
-    } catch {/* silent */}
+      if (!res.ok) allOk = false;
+    } catch { allOk = false; }
   }
+  return allOk;
 }
 
-async function pushAll(
+/** Push only items changed since the last successful push. Returns true if
+ *  everything went through (caller then advances the delta marker). */
+async function pushChanged(
   tasks: Task[],
   journals: JournalEntry[],
   events: CalendarEvent[],
-): Promise<void> {
+): Promise<boolean> {
+  const since = getLastPush();
   // Sequential, NOT parallel — running three concurrent multi-MB uploads on
   // a phone is what was killing devices.
-  await pushChunked("tasks", tasks);
-  await pushChunked("journals", journals);
-  await pushChunked("events", events);
+  const okTasks    = await pushChunked("tasks",    touchedSince(tasks, since));
+  const okJournals = await pushChunked("journals", touchedSince(journals, since));
+  const okEvents   = await pushChunked("events",   touchedSince(events, since));
+  return okTasks && okJournals && okEvents;
 }
 
 async function pushDeletes(
@@ -167,9 +193,13 @@ export function useSyncData() {
 
       isPushing.current = true;
       try {
+        // Cutoff taken BEFORE reading state: anything edited mid-push gets a
+        // timestamp >= cutoff and is picked up again next cycle. No gaps.
+        const cutoff = new Date().toISOString();
         const { tasks, journals, events, pendingDeletes } = useAppStore.getState();
         await pushDeletes(pendingDeletes, clearPendingDeletes);
-        await pushAll(tasks, journals, events);
+        const ok = await pushChanged(tasks, journals, events);
+        if (ok) setLastPush(cutoff);
         lastPushAt.current = Date.now();
       } catch {/* silent */}
       finally {
